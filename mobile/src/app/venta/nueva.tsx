@@ -7,6 +7,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSales } from '../../hooks/useSales';
 import { useProducts } from '../../hooks/useProducts';
+import { ClientSelectModal } from '../../components/ClientSelectModal';
+import { Client } from '../../database/clients';
 
 export default function NuevaVentaScreen() {
   const router = useRouter();
@@ -19,6 +21,10 @@ export default function NuevaVentaScreen() {
   const [descuento, setDescuento] = useState('');
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
+  
+  // Estado para Clientes
+  const [modalClientVisible, setModalClientVisible] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   // Carga e identificación del producto desde la base de datos local SQLite
   useEffect(() => {
@@ -75,6 +81,8 @@ export default function NuevaVentaScreen() {
         ],
         discount: descuentoNum,
         notes: notas.trim(),
+        clientId: selectedClient ? selectedClient.id : null,
+        clientName: selectedClient ? selectedClient.name : null,
       });
 
       router.push('/venta/confirmacion');
@@ -125,6 +133,27 @@ export default function NuevaVentaScreen() {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           
+          {/* SELECCIÓN DE CLIENTE */}
+          <Text style={styles.label}>Cliente (Opcional)</Text>
+          <TouchableOpacity 
+            style={styles.clientSelectorCard}
+            onPress={() => setModalClientVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.clientSelectorIcon}>
+              <Feather name={selectedClient ? "user-check" : "user"} size={20} color={selectedClient ? "#10B981" : "#7B5CF6"} />
+            </View>
+            <View style={styles.clientSelectorInfo}>
+              <Text style={styles.clientSelectorTitle}>
+                {selectedClient ? selectedClient.name : 'Venta Rápida (Sin Cliente)'}
+              </Text>
+              <Text style={styles.clientSelectorSub}>
+                {selectedClient ? (selectedClient.phone || selectedClient.rut || 'Cliente registrado') : 'Toca para seleccionar o registrar'}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#CBD5E1" />
+          </TouchableOpacity>
+
           {/* TARJETA RESUMEN DEL PRODUCTO (Datos reales de SQLite) */}
           <Text style={styles.label}>Producto seleccionado</Text>
           <View style={styles.productCard}>
@@ -242,11 +271,51 @@ export default function NuevaVentaScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Modal de Clientes */}
+      <ClientSelectModal
+        visible={modalClientVisible}
+        selectedClient={selectedClient}
+        onSelectClient={setSelectedClient}
+        onClose={() => setModalClientVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  clientSelectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  clientSelectorIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  clientSelectorInfo: {
+    flex: 1,
+  },
+  clientSelectorTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  clientSelectorSub: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 2,
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

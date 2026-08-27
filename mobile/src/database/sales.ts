@@ -1,27 +1,44 @@
 import * as Crypto from 'expo-crypto';
 import { getDatabase } from './sqlite';
 
-// Interfaz adaptada para soportar "carritos" con múltiples productos
 export interface SaleItemInput {
   productId: string;
   quantity: number;
-  unitPrice: number; // INTEGER
+  unitPrice: number;
 }
 
 export interface CreateSaleInput {
   items: SaleItemInput[];
-  discount?: number; // INTEGER
+  discount?: number;
   notes?: string;
+  clientId?: string | null;
+  clientName?: string | null;
+}
+
+async function ensureSalesColumns(): Promise<void> {
+  const db = await getDatabase();
+  try {
+    const tableInfo = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(sales)`);
+    const columnNames = tableInfo.map(c => c.name);
+
+    if (!columnNames.includes('client_id')) {
+      await db.execAsync(`ALTER TABLE sales ADD COLUMN client_id TEXT;`);
+    }
+    if (!columnNames.includes('client_name')) {
+      await db.execAsync(`ALTER TABLE sales ADD COLUMN client_name TEXT;`);
+    }
+  } catch (e) {
+    console.warn('Error verificando columnas de sales:', e);
+  }
 }
 
 export async function createSaleLocal(input: CreateSaleInput): Promise<string> {
+  await ensureSalesColumns();
   const db = await getDatabase();
   const saleId = Crypto.randomUUID();
   const now = new Date().toISOString();
 
   await db.withTransactionAsync(async () => {
-    
-    // 1. Calcular el total (Suma de subtotales - descuento)
     const discount = input.discount || 0;
     let rawTotal = 0;
     
@@ -30,17 +47,24 @@ export async function createSaleLocal(input: CreateSaleInput): Promise<string> {
     });
     
     const total = Math.max(0, rawTotal - discount);
+    const clientId = input.clientId || null;
+    const clientName = input.clientName || null;
 
-    // ==========================================
-    // 2. CREAR LA VENTA (Cabecera)
-    // ==========================================
+    // 1. CREAR LA VENTA (Cabecera)
     await db.runAsync(
-      `INSERT INTO sales (id, discount, total, notes, created_at) VALUES (?, ?, ?, ?, ?)`,
-      [saleId, discount, total, input.notes || null, now]
+      `INSERT INTO sales (id, discount, total, notes, client_id, client_name, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [saleId, discount, total, input.notes || null, clientId, clientName, now]
     );
 
     const salePayload = JSON.stringify({
-      id: saleId, discount, total, notes: input.notes || null, created_at: now
+      id: saleId, 
+      discount, 
+      total, 
+      notes: input.notes || null, 
+      client_id: clientId,
+      client_name: clientName,
+      created_at: now
     });
 
     await db.runAsync(
@@ -48,22 +72,23 @@ export async function createSaleLocal(input: CreateSaleInput): Promise<string> {
       [Crypto.randomUUID(), saleId, salePayload, now]
     );
 
-    // ==========================================
-    // 3. PROCESAR CADA PRODUCTO VENDIDO
-    // ==========================================
+    // 2. PROCESAR CADA PRODUCTO VENDIDO
     for (const item of input.items) {
       const saleItemId = Crypto.randomUUID();
       const subtotal = item.quantity * item.unitPrice;
 
-      // A. Insertar Item de Venta
       await db.runAsync(
         `INSERT INTO sale_items (id, sale_id, product_id, quantity, unit_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)`,
         [saleItemId, saleId, item.productId, item.quantity, item.unitPrice, subtotal]
       );
 
       const saleItemPayload = JSON.stringify({
-        id: saleItemId, sale_id: saleId, product_id: item.productId, 
-        quantity: item.quantity, unit_price: item.unitPrice, subtotal
+        id: saleItemId, 
+        sale_id: saleId, 
+        product_id: item.productId, 
+        quantity: item.quantity, 
+        unit_price: item.unitPrice, 
+        subtotal
       });
 
       await db.runAsync(
@@ -71,7 +96,7 @@ export async function createSaleLocal(input: CreateSaleInput): Promise<string> {
         [Crypto.randomUUID(), saleItemId, saleItemPayload, now]
       );
 
-      // B. Consultar el stock actual del producto (Protección)
+      // Descontar Stock
       const currentProduct: any = await db.getFirstAsync(
         `SELECT stock FROM products WHERE id = ?`, 
         [item.productId]
@@ -88,7 +113,6 @@ export async function createSaleLocal(input: CreateSaleInput): Promise<string> {
         throw new Error(`Stock insuficiente para vender ${item.quantity} unidades.`);
       }
 
-      // C. Actualizar Stock del Producto
       await db.runAsync(
         `UPDATE products SET stock = ?, updated_at = ? WHERE id = ?`,
         [stockAfter, now, item.productId]
@@ -103,17 +127,27 @@ export async function createSaleLocal(input: CreateSaleInput): Promise<string> {
         [Crypto.randomUUID(), item.productId, productUpdatePayload, now]
       );
 
-      // D. Crear Movimiento de Inventario
+      // Movimiento de Inventario
       const movementId = Crypto.randomUUID();
+      const reasonText = clientName 
+        ? `Venta a ${clientName} (Ref: ${saleId.substring(0,6)})`
+        : `Venta rápida (Ref: ${saleId.substring(0,6)})`;
+
       await db.runAsync(
         `INSERT INTO inventory_movements (id, product_id, type, quantity, reason, stock_before, stock_after, created_at)
          VALUES (?, ?, 'SALE', ?, ?, ?, ?, ?)`,
-        [movementId, item.productId, -item.quantity, `Venta registrada (Ref: ${saleId.substring(0,6)})`, stockBefore, stockAfter, now]
+        [movementId, item.productId, -item.quantity, reasonText, stockBefore, stockAfter, now]
       );
 
       const movPayload = JSON.stringify({
-        id: movementId, product_id: item.productId, type: 'SALE', quantity: -item.quantity,
-        reason: `Venta registrada`, stock_before: stockBefore, stock_after: stockAfter, created_at: now
+        id: movementId, 
+        product_id: item.productId, 
+        type: 'SALE', 
+        quantity: -item.quantity,
+        reason: reasonText, 
+        stock_before: stockBefore, 
+        stock_after: stockAfter, 
+        created_at: now
       });
 
       await db.runAsync(
@@ -127,9 +161,8 @@ export async function createSaleLocal(input: CreateSaleInput): Promise<string> {
 }
 
 export async function getSalesLocal() {
+  await ensureSalesColumns();
   const db = await getDatabase();
-  // Traemos las ventas y hacemos un JOIN para obtener el nombre del primer producto de esa venta
-  // (Esto es útil para la pantalla de historial de ventas)
   return await db.getAllAsync(`
     SELECT s.*, 
            (SELECT p.name FROM sale_items si JOIN products p ON si.product_id = p.id WHERE si.sale_id = s.id LIMIT 1) as first_product_name,

@@ -12,7 +12,7 @@ import { Picker } from '@react-native-picker/picker';
 
 export default function NuevoProductoScreen() {
   const router = useRouter();
-  const { addProduct } = useProducts();
+  const { addProduct, products } = useProducts();
   const { categories } = useCategories();
 
   // Estados del formulario
@@ -104,6 +104,23 @@ export default function NuevoProductoScreen() {
     }
     if (!precio.trim()) {
       Alert.alert("Campo requerido", "Por favor ingresa el precio de venta.");
+      return;
+    }
+
+    // Validación de duplicados (Mismo nombre exacto o mismo SKU)
+    const nombreLower = nombre.trim().toLowerCase();
+    const skuLower = sku.trim().toLowerCase();
+    const duplicado = products.find(p => 
+      (p.name.toLowerCase() === nombreLower) ||
+      (skuLower !== '' && p.sku && p.sku.toLowerCase() === skuLower)
+    );
+
+    if (duplicado) {
+      const razon = duplicado.name.toLowerCase() === nombreLower ? 'nombre' : 'SKU';
+      Alert.alert(
+        "Producto Duplicado",
+        `Ya existe un producto con el mismo ${razon}: "${duplicado.name}".\nPor favor usa otro nombre o SKU para evitar confusiones.`
+      );
       return;
     }
 
