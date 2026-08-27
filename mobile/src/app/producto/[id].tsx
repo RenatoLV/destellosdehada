@@ -145,6 +145,41 @@ export default function DetalleProductoScreen() {
           </View>
         ) : null}
 
+        {/* Acciones Adicionales */}
+        <View style={{ paddingHorizontal: 20, marginTop: 24 }}>
+          <TouchableOpacity 
+            style={styles.deleteProductBtn}
+            onPress={() => {
+              import('react-native').then(({ Alert }) => {
+                Alert.alert(
+                  "¿Eliminar producto?",
+                  `Estás a punto de borrar "${producto.name}". Esta acción lo quitará del inventario y sincronizará el cambio a la nube.`,
+                  [
+                    { text: "Cancelar", style: "cancel" },
+                    { 
+                      text: "Sí, Eliminar", 
+                      style: "destructive",
+                      onPress: async () => {
+                        try {
+                          const { softDeleteProductLocal } = await import('../../database/products');
+                          await softDeleteProductLocal(producto.id);
+                          Alert.alert("Eliminado", "El producto fue eliminado correctamente.");
+                          router.replace('/(tabs)/inventario');
+                        } catch (e: any) {
+                          Alert.alert("Error", e.message || "No se pudo eliminar el producto.");
+                        }
+                      }
+                    }
+                  ]
+                );
+              });
+            }}
+            activeOpacity={0.8}
+          >
+            <Feather name="trash-2" size={18} color="#EF4444" style={{ marginRight: 8 }} />
+            <Text style={styles.deleteProductText}>Descartar / Eliminar Producto</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Botones Flotantes Inferiores */}
@@ -391,5 +426,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7B5CF6',
     fontWeight: '600',
+  },
+  deleteProductBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    marginBottom: 20,
+  },
+  deleteProductText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

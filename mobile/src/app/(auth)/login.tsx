@@ -28,7 +28,11 @@ export default function LoginScreen() {
     });
 
     if (error) {
-      Alert.alert("Error de autenticación", error.message);
+      let errorMsg = error.message;
+      if (errorMsg === "Invalid login credentials" || errorMsg.includes("credentials")) {
+        errorMsg = "Correo o contraseña incorrectos. Por favor, revisa tus datos e intenta nuevamente.";
+      }
+      Alert.alert("Error de inicio de sesión", errorMsg);
     }
     setLoading(false);
   }
