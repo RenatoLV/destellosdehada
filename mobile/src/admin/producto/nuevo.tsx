@@ -6,13 +6,13 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useProducts } from '../../hooks/useProducts';
+import { useAdminProducts } from '../../hooks/useAdminProducts';
 import { useCategories } from '../../hooks/useCategories';
 import { Picker } from '@react-native-picker/picker'; 
 
 export default function NuevoProductoScreen() {
   const router = useRouter();
-  const { addProduct, products } = useProducts();
+  const { addProduct, products } = useAdminProducts();
   const { categories } = useCategories();
 
   // Estados del formulario
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   sectionSubtitle: { fontSize: 13, color: '#64748B', marginBottom: 14 },
   photoGrid: { flexDirection: 'row', alignItems: 'center' },
   photoAddBox: { width: 80, height: 80, backgroundColor: '#F5F3FF', borderRadius: 16, borderWidth: 1.5, borderColor: '#C4B5FD', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  iconCircle: { width: 40, height: 40, backgroundColor: '#FFFFFF', borderRadius: 20, justifyContent: 'center', alignItems: 'center', elevation: 2, shadowColor: '#7B5CF6', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
+  iconCircle: { width: 40, height: 40, backgroundColor: '#FFFFFF', borderRadius: 20, justifyContent: 'center', alignItems: 'center', elevation: 2, boxShadow: '0px 2px 4px rgba(62, 31, 92, 0.15)' },
   photoCard: { width: 80, height: 80, borderRadius: 16, marginRight: 12, position: 'relative' },
   photoImage: { width: '100%', height: '100%', borderRadius: 16 },
   deleteBadge: { position: 'absolute', top: -6, right: -6, backgroundColor: '#EF4444', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
@@ -422,6 +422,6 @@ const styles = StyleSheet.create({
   switchLabel: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
   switchSublabel: { fontSize: 12, color: '#64748B', marginTop: 2 },
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === 'ios' ? 32 : 20, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
-  saveButton: { backgroundColor: '#7B5CF6', borderRadius: 16, paddingVertical: 16, alignItems: 'center', shadowColor: '#7B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
+  saveButton: { backgroundColor: '#7B5CF6', borderRadius: 16, paddingVertical: 16, alignItems: 'center', boxShadow: '0px 4px 8px rgba(62, 31, 92, 0.25)', elevation: 4 },
   saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });

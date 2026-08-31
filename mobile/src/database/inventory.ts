@@ -2,6 +2,12 @@ import * as Crypto from 'expo-crypto';
 import { getDatabase } from './sqlite';
 import { InventoryMovement } from '../types/database';
 
+interface ProductStock {
+  stock: number;
+}
+
+export type MovementWithProduct = InventoryMovement & { product_name: string };
+
 export interface StockAdjustmentInput {
   productId: string;
   type: 'PURCHASE' | 'RETURN' | 'ADJUSTMENT';
@@ -16,7 +22,7 @@ export async function adjustStockLocal(input: StockAdjustmentInput): Promise<str
 
   await db.withTransactionAsync(async () => {
     // 1. Validar existencia del producto y leer el stock actual
-    const product: any = await db.getFirstAsync(
+    const product = await db.getFirstAsync<ProductStock>(
       `SELECT stock FROM products WHERE id = ? AND deleted_at IS NULL`,
       [input.productId]
     );
@@ -78,15 +84,15 @@ export async function adjustStockLocal(input: StockAdjustmentInput): Promise<str
 
 export async function getProductMovementsLocal(productId: string): Promise<InventoryMovement[]> {
   const db = await getDatabase();
-  return await db.getAllAsync(
+  return await db.getAllAsync<InventoryMovement>(
     `SELECT * FROM inventory_movements WHERE product_id = ? ORDER BY created_at DESC`,
     [productId]
   );
 }
 
-export async function getAllMovementsLocal(): Promise<any[]> {
+export async function getAllMovementsLocal(): Promise<MovementWithProduct[]> {
   const db = await getDatabase();
-  return await db.getAllAsync(`
+  return await db.getAllAsync<MovementWithProduct>(`
     SELECT m.*, p.name as product_name
     FROM inventory_movements m
     JOIN products p ON m.product_id = p.id

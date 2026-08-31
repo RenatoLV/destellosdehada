@@ -4,23 +4,39 @@ import { supabase } from '../services/supabase';
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<'initializing' | 'authenticated' | 'unauthenticated'>('initializing');
 
   useEffect(() => {
-    // 1. Obtener la sesión actual al abrir la app
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
+    let active = true;
+
+    const loadSession = async () => {
+      try {
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (active) {
+          setSession(currentSession);
+          setStatus(currentSession ? 'authenticated' : 'unauthenticated');
+        }
+      } catch {
+        if (active) {
+          setSession(null);
+          setStatus('unauthenticated');
+        }
+      }
+    };
+
+    void loadSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+      setStatus(nextSession ? 'authenticated' : 'unauthenticated');
     });
 
-    // 2. Escuchar cambios de sesión (login, logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  return { session, loading };
+  return { session, status, loading: status === 'initializing' };
 }

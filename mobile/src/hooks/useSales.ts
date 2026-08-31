@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getSalesLocal, createSaleLocal, CreateSaleInput } from '../database/sales';
+import { createSaleLocal, CreateSaleInput } from '../database/sales';
+import { listSales } from '../repositories/salesRepository';
+import { SaleSummary } from '../types/database';
 
 export function useSales() {
-  const [sales, setSales] = useState<any[]>([]);
+  const [sales, setSales] = useState<SaleSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const refreshSales = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getSalesLocal();
-      setSales(data);
+      setSales(await listSales());
     } catch (error) {
       console.error('Error al cargar ventas desde SQLite:', error);
     } finally {

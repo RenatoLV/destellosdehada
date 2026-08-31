@@ -7,10 +7,12 @@ const MAX_ATTEMPTS = 5;
 export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
   const db = await getDatabase();
   return await db.getAllAsync<SyncQueueItem>(
-    `SELECT * FROM sync_queue 
-     WHERE status IN ('pending', 'failed') AND attempts < ? 
-     ORDER BY created_at ASC`,
-    [MAX_ATTEMPTS]
+    `SELECT * FROM sync_queue
+     WHERE status IN ('pending', 'failed') AND attempts < ?
+       AND (retry_at IS NULL OR retry_at <= ?)
+     ORDER BY CASE entity WHEN 'clients' THEN 0 WHEN 'sale_transactions' THEN 1 ELSE 2 END,
+              created_at ASC, id ASC`,
+    [MAX_ATTEMPTS, new Date().toISOString()]
   );
 }
 
@@ -18,8 +20,10 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
 export async function getPendingSyncCount(): Promise<number> {
   const db = await getDatabase();
   const result = await db.getFirstAsync<{ total: number }>(
-    `SELECT COUNT(*) as total FROM sync_queue WHERE status IN ('pending', 'failed') AND attempts < ?`,
-    [MAX_ATTEMPTS]
+    `SELECT COUNT(*) as total FROM sync_queue
+     WHERE status IN ('pending', 'failed') AND attempts < ?
+       AND (retry_at IS NULL OR retry_at <= ?)`,
+    [MAX_ATTEMPTS, new Date().toISOString()]
   );
   return result?.total || 0;
 }
@@ -28,8 +32,9 @@ export async function getPendingSyncCount(): Promise<number> {
 export async function markSyncItemProcessing(id: string): Promise<void> {
   const db = await getDatabase();
   await db.runAsync(
-    `UPDATE sync_queue SET status = 'processing' WHERE id = ?`,
-    [id]
+    `UPDATE sync_queue SET status = 'processing', updated_at = ?
+     WHERE id = ? AND status IN ('pending', 'failed') AND attempts < ?`,
+    [new Date().toISOString(), id, MAX_ATTEMPTS]
   );
 }
 
@@ -38,8 +43,8 @@ export async function markSyncItemSuccess(id: string): Promise<void> {
   const db = await getDatabase();
   const now = new Date().toISOString();
   await db.runAsync(
-    `UPDATE sync_queue SET status = 'synced', processed_at = ? WHERE id = ?`,
-    [now, id]
+    `UPDATE sync_queue SET status = 'synced', processed_at = ?, updated_at = ? WHERE id = ?`,
+    [now, now, id]
   );
 }
 
@@ -48,11 +53,15 @@ export async function markSyncItemFailed(id: string, errorMessage: string): Prom
   const db = await getDatabase();
   await db.runAsync(
     `UPDATE sync_queue 
-     SET status = 'failed', 
-         attempts = attempts + 1, 
-         last_error = ? 
+     SET status = 'failed',
+         attempts = attempts + 1,
+         last_error = ?,
+         retry_at = CASE WHEN attempts + 1 < ?
+           THEN datetime('now', '+' || MIN(300, 5 * (2 << MAX(attempts, 0))) || ' seconds')
+           ELSE NULL END,
+         updated_at = ?
      WHERE id = ?`,
-    [errorMessage, id]
+    [errorMessage, MAX_ATTEMPTS, new Date().toISOString(), id]
   );
 }
 

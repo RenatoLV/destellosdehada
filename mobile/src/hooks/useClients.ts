@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Client, getClientsLocal, createClientLocal, CreateClientInput } from '../database/clients';
+import { Client, createClientLocal, CreateClientInput } from '../database/clients';
+import { listClients } from '../repositories/clientsRepository';
 
 export function useClients() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -8,8 +9,7 @@ export function useClients() {
   const fetchClients = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getClientsLocal();
-      setClients(data);
+      setClients(await listClients());
     } catch (error) {
       console.error('Error al cargar clientes:', error);
     } finally {

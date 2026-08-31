@@ -37,8 +37,9 @@ export default function MasScreen() {
           `Se procesaron ${resultado.processed} cambios. Algunos reintentos quedaron en cola para el próximo ciclo.`
         );
       }
-    } catch (error: any) {
-      Alert.alert("Error", error?.message || "No se pudo sincronizar.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "No se pudo sincronizar.";
+      Alert.alert("Error", message);
     }
   };
 
@@ -53,7 +54,7 @@ export default function MasScreen() {
           style: "destructive", 
           onPress: async () => {
             await supabase.auth.signOut();
-            router.replace('/(auth)/login' as any);
+            router.replace('/(auth)/login');
           } 
         }
       ]
@@ -114,38 +115,20 @@ export default function MasScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ADMINISTRACIÓN */}
-        <Text style={styles.sectionTitle}>Administración</Text>
-        
-        <TouchableOpacity 
-          style={styles.menuItem} 
+        {/* OPERACIÓN */}
+        <Text style={styles.sectionTitle}>Operación</Text>
+
+        <TouchableOpacity
+          style={styles.menuItem}
           activeOpacity={0.75}
-          onPress={() => router.push('/categorias' as any)}
+          onPress={() => router.push('/(tabs)/ventas')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: '#F5F3FF' }]}>
-            <Feather name="grid" size={20} color="#7B5CF6" />
+            <Feather name="shopping-bag" size={20} color="#7B5CF6" />
           </View>
           <View style={styles.menuTextContainer}>
-            <Text style={styles.menuTitle}>Gestión de Categorías</Text>
-            <Text style={styles.menuSubtitle}>Joyas, accesorios, collares y anillos</Text>
-          </View>
-          <Feather name="chevron-right" size={18} color="#CBD5E1" />
-        </TouchableOpacity>
-
-        {/* AJUSTES Y NEGOCIO */}
-        <Text style={styles.sectionTitle}>Ajustes y Datos</Text>
-
-        <TouchableOpacity 
-          style={styles.menuItem} 
-          activeOpacity={0.75}
-          onPress={() => router.push('/configuracion' as any)}
-        >
-          <View style={[styles.menuIconBox, { backgroundColor: '#F8FAFC' }]}>
-            <Feather name="sliders" size={20} color="#64748B" />
-          </View>
-          <View style={styles.menuTextContainer}>
-            <Text style={styles.menuTitle}>Configuración del Negocio</Text>
-            <Text style={styles.menuSubtitle}>Moneda, alertas de stock e información</Text>
+            <Text style={styles.menuTitle}>Historial de ventas</Text>
+            <Text style={styles.menuSubtitle}>Consulta cobros y estados de sincronización</Text>
           </View>
           <Feather name="chevron-right" size={18} color="#CBD5E1" />
         </TouchableOpacity>
@@ -191,10 +174,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
+    boxShadow: '0px 1px 3px rgba(36, 21, 54, 0.03)',
     elevation: 1,
   },
   syncHeaderRow: {

@@ -49,7 +49,7 @@ export default function ConfirmacionVentaScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28 },
-  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#22C55E', justifyContent: 'center', alignItems: 'center', marginBottom: 24, elevation: 4, shadowColor: '#22C55E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#22C55E', justifyContent: 'center', alignItems: 'center', marginBottom: 24, elevation: 4, boxShadow: '0px 4px 8px rgba(34, 197, 94, 0.30)' },
   title: { fontSize: 26, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
   subtitle: { fontSize: 15, color: '#64748B', textAlign: 'center', marginTop: 8, marginBottom: 36, lineHeight: 22 },
   actionsContainer: { width: '100%', gap: 12 },

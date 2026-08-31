@@ -5,12 +5,12 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useProducts } from '../../hooks/useProducts';
+import { useAdminProducts } from '../../hooks/useAdminProducts';
 
 export default function DetalleProductoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { products, loading, refreshProducts } = useProducts();
+  const { products, loading, refreshProducts } = useAdminProducts();
 
   // Recargar datos al volver a esta pantalla
   useFocusEffect(
@@ -188,7 +188,8 @@ export default function DetalleProductoScreen() {
           <TouchableOpacity 
             style={styles.secondaryBtn} 
             activeOpacity={0.8}
-            onPress={() => router.push({ pathname: '/producto/editar', params: { id: producto.id } })}
+            // Este módulo vive fuera del router de Sales; Admin mantiene sus propias rutas.
+            onPress={() => router.push({ pathname: '/producto/editar', params: { id: producto.id } } as never)}
           >
             <Feather name="edit-2" size={20} color="#475569" style={{ marginRight: 8 }} />
             <Text style={styles.secondaryBtnText}>Editar</Text>
@@ -210,7 +211,7 @@ export default function DetalleProductoScreen() {
         {/* Enlace al historial */}
         <TouchableOpacity 
           style={styles.historyLink}
-          onPress={() => router.push({ pathname: '/producto/historial', params: { id: producto.id } })}
+          onPress={() => router.push({ pathname: '/producto/historial', params: { id: producto.id } } as never)}
         >
           <Feather name="clock" size={16} color="#7B5CF6" style={{ marginRight: 6 }} />
           <Text style={styles.historyText}>Ver historial de movimientos</Text>
@@ -393,10 +394,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 2,
-    shadowColor: '#7B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(62, 31, 92, 0.20)',
   },
   primaryBtnText: {
     color: '#FFFFFF',

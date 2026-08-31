@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import { getDatabase } from './sqlite';
+import { Product } from '../types/database';
 
 export interface CreateProductInput {
   name: string;
@@ -84,9 +85,9 @@ export async function createProductLocal(input: CreateProductInput): Promise<str
   return productId;
 }
 
-export async function getProductsLocal() {
+export async function getProductsLocal(): Promise<Product[]> {
   const db = await getDatabase();
-  return await db.getAllAsync(`
+  return await db.getAllAsync<Product>(`
     SELECT p.*,
            (SELECT local_uri FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) as image_uri
     FROM products p
@@ -157,9 +158,9 @@ export async function softDeleteProductLocal(id: string): Promise<void> {
 }
 
 // Obtener todos los productos que están en la papelera (Soft Deleted)
-export async function getDeletedProductsLocal() {
+export async function getDeletedProductsLocal(): Promise<Product[]> {
   const db = await getDatabase();
-  return await db.getAllAsync(`
+  return await db.getAllAsync<Product>(`
     SELECT p.*,
            (SELECT local_uri FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) as image_uri
     FROM products p

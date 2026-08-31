@@ -7,7 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
-import { useProducts } from '../../hooks/useProducts';
+import { useAdminProducts } from '../../hooks/useAdminProducts';
 import { useCategories } from '../../hooks/useCategories';
 import { updateProductLocal, softDeleteProductLocal } from '../../database/products';
 import { adjustStockLocal } from '../../database/inventory';
@@ -15,7 +15,7 @@ import { adjustStockLocal } from '../../database/inventory';
 export default function EditarProductoScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { products, loading: loadingProducts, refreshProducts } = useProducts();
+  const { products, loading: loadingProducts, refreshProducts } = useAdminProducts();
   const { categories } = useCategories();
 
   const productoOriginal = products.find(p => String(p.id) === String(id));

@@ -5,6 +5,7 @@ export const CREATE_TABLES_QUERY = `
   CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    owner_id TEXT,
     parent_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -14,6 +15,7 @@ export const CREATE_TABLES_QUERY = `
   CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    owner_id TEXT,
     description TEXT,
     category_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,
     type TEXT,
@@ -32,7 +34,9 @@ export const CREATE_TABLES_QUERY = `
   CREATE TABLE IF NOT EXISTS product_images (
     id TEXT PRIMARY KEY,
     product_id TEXT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-    storage_path TEXT NOT NULL,
+    owner_id TEXT,
+    local_uri TEXT,
+    storage_path TEXT,
     is_primary INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
@@ -56,6 +60,8 @@ export const CREATE_TABLES_QUERY = `
     discount REAL NOT NULL DEFAULT 0 CHECK (discount >= 0),
     total REAL NOT NULL DEFAULT 0 CHECK (total >= 0),
     notes TEXT,
+    client_id TEXT,
+    client_name TEXT,
     created_at TEXT NOT NULL
   );
 
@@ -77,6 +83,11 @@ export const CREATE_TABLES_QUERY = `
     entity_id TEXT NOT NULL,
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending'
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    processed_at TEXT,
+    retry_at TEXT,
+    updated_at TEXT NOT NULL
   );
 `;

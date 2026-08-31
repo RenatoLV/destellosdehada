@@ -11,23 +11,20 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#7B5CF6',
-        tabBarInactiveTintColor: '#94A3B8',
+        tabBarActiveTintColor: '#3E1F5C',
+        tabBarInactiveTintColor: '#8C8390',
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: '#FFFDF9',
           borderTopWidth: 1,
-          borderTopColor: '#E2E8F0',
+          borderTopColor: '#E3DBD1',
           height: Platform.OS === 'ios' ? 56 + insets.bottom : 64,
           paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
           paddingTop: 8,
           elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.04,
-          shadowRadius: 4,
+          boxShadow: '0px -2px 4px rgba(36, 21, 54, 0.08)',
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '700',
         },
       }}
@@ -44,7 +41,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="inventario"
         options={{
-          title: 'Inventario',
+          title: 'Catálogo',
           tabBarIcon: ({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) => (
             <Feather name="box" size={20} color={color as string} />
           ),

@@ -1,7 +1,7 @@
 import React, { useMemo, useCallback, useState } from 'react';
-import { 
-  StyleSheet, Text, View, TouchableOpacity, 
-  ScrollView, ActivityIndicator, Image, RefreshControl 
+import {
+  StyleSheet, Text, View, TouchableOpacity,
+  ScrollView, ActivityIndicator, Image, RefreshControl, useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -13,6 +13,8 @@ import { SyncBadge } from '../../components/SyncBadge';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const horizontalPadding = width < 360 ? 12 : 16;
   const { products, loading: loadingProducts, refreshProducts } = useProducts();
   const { sales, loading: loadingSales, refreshSales } = useSales();
   const { syncNow, isSyncing } = useSync();
@@ -66,84 +68,109 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing || isSyncing} 
-            onRefresh={onRefresh} 
-            tintColor="#7B5CF6"
-            colors={['#7B5CF6']}
+          <RefreshControl
+            refreshing={refreshing || isSyncing}
+            onRefresh={onRefresh}
+            tintColor="#3E1F5C"
+            colors={['#3E1F5C']}
           />
         }
       >
-        {/* Barra superior de estado y marca */}
+        {/* Barra superior de marca */}
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
             <View style={styles.sparkleIcon}>
-              <Ionicons name="sparkles" size={18} color="#7B5CF6" />
+              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
             </View>
             <Text style={styles.brandName}>Destellos de Hada</Text>
           </View>
-          <SyncBadge variant="pill" />
+          <View style={styles.topActions}>
+            <SyncBadge variant="pill" />
+            <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/(tabs)/mas')} activeOpacity={0.7}>
+              <Feather name="settings" size={18} color="#241536" />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Header de Saludo */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greetingTitle}>¡Hola! ✨</Text>
-            <Text style={styles.greetingSubtitle}>Resumen de tu joyería y catálogo</Text>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroEyebrow}>CENTRO DE OPERACIONES</Text>
+          <Text style={styles.heroTitle}>Todo bajo control.</Text>
+          <Text style={styles.heroText}>Revisa primero lo que necesita acción y luego consulta el rendimiento de tu tienda.</Text>
+          <View style={styles.heroActions}>
+            <TouchableOpacity style={styles.heroPrimary} onPress={() => router.push('/venta/nueva')} activeOpacity={0.85}>
+              <Feather name="plus" size={15} color="#3E1F5C" /><Text style={styles.heroPrimaryText}>Nueva venta</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.heroGhost} onPress={() => router.push('/(tabs)/ventas')} activeOpacity={0.85}>
+              <Text style={styles.heroGhostText}>Ver ventas</Text><Feather name="arrow-up-right" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity 
-            style={styles.settingsBtn}
-            onPress={() => router.push('/(tabs)/mas')}
-            activeOpacity={0.7}
-          >
-            <Feather name="settings" size={20} color="#475569" />
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <View><Text style={styles.sectionTitle}>Pendientes de hoy</Text><Text style={styles.sectionSubtitle}>Acciones que necesitan atención</Text></View>
+          <Text style={styles.linkText}>{metricas.stockBajo} alertas</Text>
+        </View>
+        <View style={styles.pendingList}>
+          <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/(tabs)/inventario')} activeOpacity={0.75}>
+            <View style={[styles.pendingIcon, styles.pendingIconRed]}><Feather name="alert-triangle" size={16} color="#A64242" /></View>
+            <View style={styles.pendingMain}><Text style={styles.pendingTitle}>Productos bajo mínimo</Text><Text style={styles.pendingText}>Revisa stock y reposición</Text></View>
+            <Text style={styles.pendingCount}>{metricas.stockBajo}</Text><Feather name="chevron-right" size={16} color="#B9AFB5" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.pendingRow} onPress={() => router.push('/venta/nueva')} activeOpacity={0.75}>
+            <View style={[styles.pendingIcon, styles.pendingIconGreen]}><Feather name="shopping-bag" size={16} color="#2E7655" /></View>
+            <View style={styles.pendingMain}><Text style={styles.pendingTitle}>Registrar una venta</Text><Text style={styles.pendingText}>Mantén actualizado tu flujo</Text></View>
+            <Feather name="plus-circle" size={18} color="#2E7655" />
           </TouchableOpacity>
         </View>
 
+        <View style={styles.sectionHeader}>
+          <View><Text style={styles.sectionTitle}>Resumen</Text><Text style={styles.sectionSubtitle}>Actividad de hoy</Text></View>
+          <Text style={styles.linkText}>Hoy</Text>
+        </View>
         {/* Tarjetas de Resumen (Grid 2x2) */}
         {isLoading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="small" color="#7B5CF6" />
+            <ActivityIndicator size="small" color="#3E1F5C" />
             <Text style={styles.loadingText}>Cargando inventario local...</Text>
           </View>
         ) : (
           <View style={styles.statsGrid}>
-            <View style={[styles.statCard, { borderLeftColor: '#7B5CF6' }]}>
+            <View style={[styles.statCard, { borderLeftColor: '#3E1F5C' }]}>
               <View style={styles.statIconBoxPurple}>
-                <Feather name="box" size={16} color="#7B5CF6" />
+                <Feather name="box" size={16} color="#3E1F5C" />
               </View>
               <Text style={styles.statLabel}>Productos</Text>
               <Text style={styles.statValue}>{metricas.totalProductos}</Text>
             </View>
-            
-            <View style={[styles.statCard, { borderLeftColor: '#10B981' }]}>
+
+            <View style={[styles.statCard, { borderLeftColor: '#2E7655' }]}>
               <View style={styles.statIconBoxGreen}>
-                <Feather name="trending-up" size={16} color="#10B981" />
+                <Feather name="trending-up" size={16} color="#2E7655" />
               </View>
               <Text style={styles.statLabel}>Ventas hoy</Text>
               <Text style={styles.statValue}>
                 {metricas.ventasHoyCount} {metricas.ventasHoyTotal > 0 ? `(\$${metricas.ventasHoyTotal.toLocaleString('es-CL')})` : ''}
               </Text>
             </View>
-            
-            <View style={[styles.statCard, { borderLeftColor: '#6366F1' }]}>
+
+            <View style={[styles.statCard, { borderLeftColor: '#65427D' }]}>
               <View style={styles.statIconBoxIndigo}>
-                <Feather name="dollar-sign" size={16} color="#6366F1" />
+                <Feather name="dollar-sign" size={16} color="#65427D" />
               </View>
               <Text style={styles.statLabel}>Valor catálogo</Text>
               <Text style={styles.statValue}>${metricas.valorInventario.toLocaleString('es-CL')}</Text>
             </View>
-            
-            <View style={[styles.statCard, { borderLeftColor: metricas.stockBajo > 0 ? '#EF4444' : '#E2E8F0' }]}>
+
+            <View style={[styles.statCard, { borderLeftColor: metricas.stockBajo > 0 ? '#A64242' : '#E3DBD1' }]}>
               <View style={metricas.stockBajo > 0 ? styles.statIconBoxRed : styles.statIconBoxGray}>
-                <Feather name="alert-triangle" size={16} color={metricas.stockBajo > 0 ? "#EF4444" : "#94A3B8"} />
+                <Feather name="alert-triangle" size={16} color={metricas.stockBajo > 0 ? "#A64242" : "#786F7D"} />
               </View>
               <Text style={styles.statLabel}>Stock bajo</Text>
-              <Text style={[styles.statValue, metricas.stockBajo > 0 && { color: '#EF4444' }]}>
+                <Text style={[styles.statValue, metricas.stockBajo > 0 && { color: '#A64242' }]}>
                 {metricas.stockBajo}
               </Text>
             </View>
@@ -153,27 +180,27 @@ export default function HomeScreen() {
         {/* Acciones Rápidas Táctiles (Mobile Friendly) */}
         <Text style={styles.sectionTitle}>Acciones rápidas</Text>
         <View style={styles.actionsGrid}>
-          <TouchableOpacity 
-            style={[styles.actionBtn, { backgroundColor: '#7B5CF6' }]}
-            onPress={() => router.push('/producto/nuevo')}
-            activeOpacity={0.85}
-          >
-            <View style={styles.actionIconCircleWhite}>
-              <Feather name="plus" size={18} color="#7B5CF6" />
-            </View>
-            <View>
-              <Text style={styles.actionBtnMainText}>Nuevo producto</Text>
-              <Text style={styles.actionBtnSubText}>Foto y precio</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.actionBtn, { backgroundColor: '#10B981' }]}
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#3E1F5C' }]}
             onPress={() => router.push('/venta/nueva')}
             activeOpacity={0.85}
           >
             <View style={styles.actionIconCircleWhite}>
-              <Feather name="shopping-bag" size={18} color="#10B981" />
+              <Feather name="plus" size={18} color="#3E1F5C" />
+            </View>
+            <View>
+              <Text style={styles.actionBtnMainText}>Nueva venta</Text>
+              <Text style={styles.actionBtnSubText}>Cobro rápido</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#2E7655' }]}
+            onPress={() => router.push('/venta/nueva')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.actionIconCircleWhite}>
+              <Feather name="shopping-bag" size={18} color="#2E7655" />
             </View>
             <View>
               <Text style={styles.actionBtnMainText}>Cobrar venta</Text>
@@ -181,7 +208,7 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionBtnLight, { borderColor: '#DDD6FE', backgroundColor: '#F5F3FF' }]}
             onPress={() => router.push('/(tabs)/inventario')}
             activeOpacity={0.85}
@@ -190,13 +217,13 @@ export default function HomeScreen() {
             <Text style={[styles.actionBtnLightText, { color: '#6D28D9' }]}>Ver catálogo</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionBtnLight, { borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }]}
-            onPress={() => router.push('/categorias' as any)}
+            onPress={() => router.push('/(tabs)/ventas')}
             activeOpacity={0.85}
           >
             <Feather name="grid" size={18} color="#C2410C" style={{ marginRight: 10 }} />
-            <Text style={[styles.actionBtnLightText, { color: '#C2410C' }]}>Categorías</Text>
+            <Text style={[styles.actionBtnLightText, { color: '#C2410C' }]}>Historial</Text>
           </TouchableOpacity>
         </View>
 
@@ -215,22 +242,22 @@ export default function HomeScreen() {
                 <Ionicons name="sparkles-outline" size={28} color="#A78BFA" />
               </View>
               <Text style={styles.emptyTitle}>Tu catálogo está listo</Text>
-              <Text style={styles.emptyText}>Agrega tus primeras joyas para empezar a gestionar tu stock.</Text>
-              <TouchableOpacity 
+              <Text style={styles.emptyText}>El catálogo se administra desde la aplicación Admin y se sincroniza aquí.</Text>
+              <TouchableOpacity
                 style={styles.emptyAddBtn}
-                onPress={() => router.push('/producto/nuevo')}
+                onPress={() => router.push('/(tabs)/inventario')}
                 activeOpacity={0.85}
               >
-                <Feather name="plus" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.emptyAddBtnText}>Crear producto</Text>
+                <Feather name="package" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.emptyAddBtnText}>Ver catálogo</Text>
               </TouchableOpacity>
             </View>
           ) : (
             ultimosProductos.map((item) => (
-              <TouchableOpacity 
-                key={item.id} 
+              <TouchableOpacity
+                key={item.id}
                 style={styles.productCard}
-                onPress={() => router.push({ pathname: '/producto/[id]', params: { id: item.id } })}
+                onPress={() => router.push({ pathname: '/venta/nueva', params: { productId: item.id } })}
                 activeOpacity={0.7}
               >
                 <View style={styles.productImagePlaceholder}>
@@ -246,7 +273,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.productStock}>
                   <View style={[
-                    styles.stockPill, 
+                    styles.stockPill,
                     Number(item.stock) === 0 ? styles.stockPillOut : Number(item.stock) <= 2 ? styles.stockPillLow : styles.stockPillOk
                   ]}>
                     <Text style={[
@@ -270,18 +297,18 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F7F3ED',
   },
   scrollContent: {
     padding: 16,
     paddingTop: 10,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
     paddingHorizontal: 4,
   },
   brandRow: {
@@ -289,20 +316,96 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sparkleIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#EDE9FE',
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: '#3E1F5C',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 9,
   },
   brandName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#241536',
     letterSpacing: -0.3,
   },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroCard: {
+    backgroundColor: '#3E1F5C',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  heroEyebrow: {
+    color: '#E8D89F',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '500',
+    letterSpacing: -0.6,
+    marginTop: 8,
+  },
+  heroText: {
+    color: '#EEE8F4',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+    maxWidth: 290,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+  },
+  heroPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  heroPrimaryText: { color: '#3E1F5C', fontSize: 12, fontWeight: '800' },
+  heroGhost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    borderRadius: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  heroGhostText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  pendingList: { gap: 8, marginBottom: 20 },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFDF9',
+    borderColor: '#E3DBD1',
+    borderWidth: 1,
+    borderRadius: 15,
+    padding: 11,
+  },
+  pendingIcon: { width: 38, height: 38, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  pendingIconRed: { backgroundColor: '#F9E8E8' },
+  pendingIconGreen: { backgroundColor: '#E7F3EC' },
+  pendingMain: { flex: 1 },
+  pendingTitle: { color: '#241536', fontSize: 12, fontWeight: '800' },
+  pendingText: { color: '#786F7D', fontSize: 10, marginTop: 2 },
+  pendingCount: { color: '#A64242', fontSize: 14, fontWeight: '900' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -313,12 +416,12 @@ const styles = StyleSheet.create({
   greetingTitle: {
     fontSize: 26,
     fontWeight: '900',
-    color: '#0F172A',
+    color: '#241536',
     letterSpacing: -0.5,
   },
   greetingSubtitle: {
     fontSize: 13,
-    color: '#64748B',
+    color: '#786F7D',
     marginTop: 2,
     fontWeight: '500',
   },
@@ -326,9 +429,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFDF9',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E3DBD1',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -337,14 +440,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFDF9',
     borderRadius: 16,
     marginBottom: 20,
   },
   loadingText: {
     marginLeft: 10,
     fontSize: 13,
-    color: '#64748B',
+    color: '#786F7D',
   },
   statsGrid: {
     flexDirection: 'row',
@@ -354,24 +457,21 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '48.5%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFDF9',
     borderRadius: 16,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E3DBD1',
     borderLeftWidth: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    boxShadow: '0px 1px 3px rgba(36, 21, 54, 0.04)',
     elevation: 1,
   },
   statIconBoxPurple: {
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#EEE7F4',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -380,7 +480,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#E7F3EC',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -389,7 +489,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#EEE7F4',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -398,7 +498,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#F9E8E8',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -407,14 +507,14 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F0EBE4',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   statLabel: {
     fontSize: 11,
-    color: '#64748B',
+    color: '#786F7D',
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
@@ -422,7 +522,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#241536',
     marginTop: 4,
   },
   sectionHeader: {
@@ -430,21 +530,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
-    marginTop: 8,
+    marginTop: 6,
     paddingHorizontal: 4,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 10,
+    color: '#241536',
+    marginBottom: 4,
     paddingHorizontal: 4,
   },
   linkText: {
-    fontSize: 13,
-    color: '#7B5CF6',
+    fontSize: 11,
+    color: '#3E1F5C',
     fontWeight: '700',
   },
+  sectionSubtitle: { fontSize: 11, color: '#786F7D', paddingHorizontal: 4 },
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -459,17 +560,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 10,
     minHeight: 58,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(36, 21, 54, 0.10)',
     elevation: 2,
   },
   actionIconCircleWhite: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFDF9',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
@@ -505,11 +603,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
+    borderColor: '#E3DBD1',
+    boxShadow: '0px 1px 3px rgba(36, 21, 54, 0.03)',
     elevation: 1,
   },
   emptyBox: {
@@ -520,7 +615,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#EEE7F4',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
@@ -540,7 +635,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#7B5CF6',
+    backgroundColor: '#3E1F5C',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
@@ -555,19 +650,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#E3DBD1',
   },
   productImagePlaceholder: {
     width: 46,
     height: 46,
-    backgroundColor: '#FAF5FF',
+    backgroundColor: '#F0EBE4',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#F3E8FF',
+    borderColor: '#E3DBD1',
   },
   productImage: {
     width: '100%',
@@ -584,7 +679,7 @@ const styles = StyleSheet.create({
   },
   productPrice: {
     fontSize: 13,
-    color: '#7B5CF6',
+    color: '#3E1F5C',
     fontWeight: '800',
   },
   productStock: {

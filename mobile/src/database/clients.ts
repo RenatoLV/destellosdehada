@@ -1,17 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { getDatabase } from './sqlite';
-
-export interface Client {
-  id: string;
-  name: string;
-  phone?: string | null;
-  email?: string | null;
-  rut?: string | null;
-  notes?: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string | null;
-}
+import { Client } from '../types/database';
+export { Client } from '../types/database';
 
 export interface CreateClientInput {
   name: string;
@@ -31,6 +21,7 @@ export async function ensureClientsTable(): Promise<void> {
       email TEXT,
       rut TEXT,
       notes TEXT,
+      owner_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       deleted_at TEXT
@@ -61,6 +52,8 @@ export async function createClientLocal(input: CreateClientInput): Promise<Clien
     email: input.email?.trim() || null,
     rut: input.rut?.trim() || null,
     notes: input.notes?.trim() || null,
+    owner_id: null,
+    deleted_at: null,
     created_at: now,
     updated_at: now,
   };
@@ -69,7 +62,7 @@ export async function createClientLocal(input: CreateClientInput): Promise<Clien
     await db.runAsync(
       `INSERT INTO clients (id, name, phone, email, rut, notes, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [client.id, client.name, client.phone, client.email, client.rut, client.notes, now, now]
+      [client.id, client.name, client.phone ?? null, client.email ?? null, client.rut ?? null, client.notes ?? null, now, now]
     );
 
     const payload = JSON.stringify(client);
