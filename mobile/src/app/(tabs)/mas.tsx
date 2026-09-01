@@ -8,6 +8,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSync } from '../../sync/useSync';
 import { supabase } from '../../services/supabase';
+import { clearOrganizationContext } from '../../services/organizationContext';
 
 export default function MasScreen() {
   const router = useRouter();
@@ -54,6 +55,7 @@ export default function MasScreen() {
           style: "destructive", 
           onPress: async () => {
             await supabase.auth.signOut();
+            await clearOrganizationContext();
             router.replace('/(auth)/login');
           } 
         }

@@ -32,9 +32,14 @@ Deno.serve(async (request) => {
 
   try {
     const sale = await request.json();
-    const { data, error } = await supabase.rpc('process_sale', { p_sale: sale });
+    const { data, error } = await supabase.rpc('process_sale', {
+      p_sale: sale,
+      p_organization_id: sale?.organization_id,
+      p_idempotency_key: sale?.idempotency_key,
+      p_payload_hash: sale?.payload_hash,
+    });
     if (error) {
-      return new Response(JSON.stringify({ error: error.message, code: error.code }), { status: 409, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'internal_error', code: error.code }), { status: 500, headers: corsHeaders });
     }
     return new Response(JSON.stringify(data), { status: 200, headers: corsHeaders });
   } catch {

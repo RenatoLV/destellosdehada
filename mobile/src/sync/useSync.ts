@@ -11,6 +11,9 @@ export function useSync() {
     isOnline: true,
     isSyncing: false,
     pendingCount: 0,
+    processingCount: 0,
+    failedCount: 0,
+    blockedCount: 0,
     lastSyncTime: null,
     lastError: null,
   });

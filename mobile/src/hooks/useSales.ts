@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createSaleLocal, CreateSaleInput } from '../database/sales';
+import { CreatePOSSaleInput, submitPOSSale } from '../domain/pos';
 import { listSales } from '../repositories/salesRepository';
 import { SaleSummary } from '../types/database';
 
@@ -22,8 +22,8 @@ export function useSales() {
     refreshSales();
   }, [refreshSales]);
 
-  const addSale = async (input: CreateSaleInput) => {
-    const id = await createSaleLocal(input);
+  const addSale = async (input: CreatePOSSaleInput) => {
+    const { saleId: id } = await submitPOSSale(input);
     await refreshSales();
     return id;
   };

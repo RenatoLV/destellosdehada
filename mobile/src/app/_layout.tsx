@@ -81,15 +81,15 @@ function SplashDestellosHada() {
 }
 
 export default function RootLayout() {
-  const { session, status } = useAuth();
+  const { session, status, currentOrganization, organizationLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   // Sync solo existe mientras hay una sesión autenticada.
   useEffect(() => {
-    if (status !== 'authenticated') return;
+    if (status !== 'authenticated' || !currentOrganization) return;
     return initSyncEngine();
-  }, [status]);
+  }, [status, currentOrganization]);
 
   // 2. Control de navegación según estado de autenticación
   useEffect(() => {
@@ -107,7 +107,7 @@ export default function RootLayout() {
   }, [session, status, segments]);
 
   // Si la app está verificando la sesión, muestra la animación
-  if (status === 'initializing') {
+  if (status === 'initializing' || (status === 'authenticated' && organizationLoading)) {
     return <SplashDestellosHada />;
   }
 

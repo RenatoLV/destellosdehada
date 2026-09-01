@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".test-dist",
+    "rootDir": "src",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "target": "es2022",
+    "declaration": false,
+    "sourceMap": false,
+    "isolatedModules": false,
+    "verbatimModuleSyntax": false,
+    "types": []
+  },
+  "include": [
+    "src/types/database.ts",
+    "src/domain/pos/types.ts",
+    "src/domain/pos/errors.ts",
+    "src/domain/pos/money.ts",
+    "src/domain/pos/cart.ts",
+    "src/domain/pos/checkout.ts",
+    "src/sync/syncPolicy.ts",
+    "src/services/receiptContract.ts",
+    "src/constants/transferContract.ts"
+  ]
+}

@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { getDatabase } from './sqlite';
 import { Client } from '../types/database';
+import { getCurrentOrganizationId, getCurrentUserId } from '../services/organizationContext';
 export { Client } from '../types/database';
 
 export interface CreateClientInput {
@@ -11,36 +12,19 @@ export interface CreateClientInput {
   notes?: string;
 }
 
-export async function ensureClientsTable(): Promise<void> {
-  const db = await getDatabase();
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS clients (
-      id TEXT PRIMARY KEY NOT NULL,
-      name TEXT NOT NULL,
-      phone TEXT,
-      email TEXT,
-      rut TEXT,
-      notes TEXT,
-      owner_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      deleted_at TEXT
-    );
-  `);
-}
-
 export async function getClientsLocal(): Promise<Client[]> {
-  await ensureClientsTable();
+  const organizationId = await getCurrentOrganizationId();
   const db = await getDatabase();
   return await db.getAllAsync<Client>(`
     SELECT * FROM clients 
-    WHERE deleted_at IS NULL 
+    WHERE organization_id = ? AND deleted_at IS NULL
     ORDER BY name ASC
-  `);
+  `, [organizationId]);
 }
 
 export async function createClientLocal(input: CreateClientInput): Promise<Client> {
-  await ensureClientsTable();
+  const organizationId = await getCurrentOrganizationId();
+  const userId = await getCurrentUserId();
   const db = await getDatabase();
   const id = Crypto.randomUUID();
   const now = new Date().toISOString();
@@ -52,7 +36,8 @@ export async function createClientLocal(input: CreateClientInput): Promise<Clien
     email: input.email?.trim() || null,
     rut: input.rut?.trim() || null,
     notes: input.notes?.trim() || null,
-    owner_id: null,
+    organization_id: organizationId,
+    owner_id: userId,
     deleted_at: null,
     created_at: now,
     updated_at: now,
@@ -60,16 +45,18 @@ export async function createClientLocal(input: CreateClientInput): Promise<Clien
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO clients (id, name, phone, email, rut, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [client.id, client.name, client.phone ?? null, client.email ?? null, client.rut ?? null, client.notes ?? null, now, now]
+      `INSERT INTO clients (id, organization_id, owner_id, name, phone, email, rut, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [client.id, organizationId, userId, client.name, client.phone ?? null, client.email ?? null,
+        client.rut ?? null, client.notes ?? null, now, now]
     );
 
     const payload = JSON.stringify(client);
     await db.runAsync(
-      `INSERT INTO sync_queue (id, operation, entity, entity_id, payload, created_at)
-       VALUES (?, 'INSERT', 'clients', ?, ?, ?)`,
-      [Crypto.randomUUID(), id, payload, now]
+      `INSERT INTO sync_queue
+       (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
+       VALUES (?, ?, ?, 'INSERT', 'clients', ?, ?, NULL, ?)`,
+      [Crypto.randomUUID(), organizationId, userId, id, payload, now]
     );
   });
 
@@ -77,21 +64,24 @@ export async function createClientLocal(input: CreateClientInput): Promise<Clien
 }
 
 export async function deleteClientLocal(id: string): Promise<void> {
-  await ensureClientsTable();
+  const organizationId = await getCurrentOrganizationId();
+  const userId = await getCurrentUserId();
   const db = await getDatabase();
   const now = new Date().toISOString();
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `UPDATE clients SET deleted_at = ?, updated_at = ? WHERE id = ?`,
-      [now, now, id]
+      `UPDATE clients SET deleted_at = ?, updated_at = ?
+       WHERE id = ? AND organization_id = ?`,
+      [now, now, id, organizationId]
     );
 
-    const payload = JSON.stringify({ id, deleted_at: now, updated_at: now });
+    const payload = JSON.stringify({ id, organization_id: organizationId, deleted_at: now, updated_at: now });
     await db.runAsync(
-      `INSERT INTO sync_queue (id, operation, entity, entity_id, payload, created_at)
-       VALUES (?, 'UPDATE', 'clients', ?, ?, ?)`,
-      [Crypto.randomUUID(), id, payload, now]
+      `INSERT INTO sync_queue
+       (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
+       VALUES (?, ?, ?, 'UPDATE', 'clients', ?, ?, NULL, ?)`,
+      [Crypto.randomUUID(), organizationId, userId, id, payload, now]
     );
   });
 }
