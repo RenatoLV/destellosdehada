@@ -33,6 +33,14 @@ interface RemoteMembership {
   updated_at: string;
 }
 
+interface BootstrapOrganizationResult {
+  success: boolean;
+  code?: string;
+  organization_id?: string;
+  name?: string;
+  role?: Membership['role'];
+}
+
 const LOCAL_ORGANIZATION_PREFIX = 'local:';
 let cachedContext: { userId: string; organization: Organization; role: Membership['role'] } | null = null;
 
@@ -210,6 +218,23 @@ async function findRemoteOrganization(
   return null;
 }
 
+async function bootstrapFirstRemoteOrganization(
+  userId: string,
+): Promise<{ organization: Organization; role: Membership['role'] } | null> {
+  const { data, error } = await supabase.rpc('bootstrap_first_organization', {
+    p_name: 'Destellos de Hada',
+  });
+  if (error) throw error;
+
+  const result = data as BootstrapOrganizationResult | null;
+  if (!result?.success) return null;
+
+  // Read the organization through normal RLS after the SECURITY DEFINER RPC.
+  // This proves the membership exists and avoids trusting response fields as
+  // the long-lived local tenancy context.
+  return findRemoteOrganization(userId);
+}
+
 export async function getCurrentOrganization(): Promise<Organization> {
   const userId = await getCurrentUserId();
   if (cachedContext?.userId === userId) return cachedContext.organization;
@@ -239,7 +264,8 @@ export async function getCurrentOrganization(): Promise<Organization> {
   }
 
   try {
-    const remote = await findRemoteOrganization(userId);
+    const remote = await findRemoteOrganization(userId)
+      ?? await bootstrapFirstRemoteOrganization(userId);
     if (remote) {
       await persistOrganizationContext(userId, remote.organization, remote.role);
       cachedContext = { userId, organization: remote.organization, role: remote.role };

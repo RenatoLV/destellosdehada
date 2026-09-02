@@ -56,3 +56,21 @@ test('Edge Function usa JWT del caller y no service role', () => {
   assert.doesNotMatch(edge, /SERVICE_ROLE/);
   assert.match(edge, /rpc\('process_sale'/);
 });
+
+test('bootstrap inicial usa auth.uid, es atómico y se cierra después de la primera organización', () => {
+  const bootstrap = migration('018_bootstrap_first_organization.sql');
+  assert.match(bootstrap, /v_user_id UUID := auth\.uid\(\)/i);
+  assert.match(bootstrap, /pg_advisory_xact_lock/i);
+  assert.match(bootstrap, /ORGANIZATION_BOOTSTRAP_CLOSED/i);
+  assert.match(bootstrap, /VALUES \(v_organization\.id, v_user_id, 'owner', TRUE\)/i);
+  assert.doesNotMatch(bootstrap, /p_user_id/i);
+  assert.match(bootstrap, /REVOKE ALL .* FROM anon/i);
+  assert.match(bootstrap, /GRANT EXECUTE .* TO authenticated/i);
+});
+
+test('hash server-side resuelve pgcrypto explícitamente y usa volatilidad compatible', () => {
+  const hashFix = migration('019_fix_server_payload_hash.sql');
+  assert.match(hashFix, /extensions\.digest/i);
+  assert.match(hashFix, /LANGUAGE plpgsql\s+STABLE/i);
+  assert.doesNotMatch(hashFix, /\bIMMUTABLE\b/i);
+});

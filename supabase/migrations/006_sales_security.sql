@@ -202,7 +202,7 @@ BEGIN
       RAISE EXCEPTION 'insufficient_stock:%', v_item.product_id USING ERRCODE = 'P0001';
     END IF;
     INSERT INTO public.inventory_movements (id, owner_id, product_id, type, quantity, reason, stock_before, stock_after, created_at)
-    VALUES (uuid_generate_v4()::TEXT, v_user_id, v_item.product_id, 'SALE', -v_item.quantity, 'Venta POS', v_product.stock, v_product.stock - v_item.quantity, NOW());
+    VALUES (extensions.uuid_generate_v4()::TEXT, v_user_id, v_item.product_id, 'SALE', -v_item.quantity, 'Venta POS', v_product.stock, v_product.stock - v_item.quantity, NOW());
   END LOOP;
 
   RETURN jsonb_build_object('status', 'created', 'sale_id', v_sale_id, 'total', v_total - v_discount);

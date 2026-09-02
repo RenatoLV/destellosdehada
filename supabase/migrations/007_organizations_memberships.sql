@@ -2,7 +2,7 @@
 -- Crea el límite organizacional sin modificar todavía las tablas de negocio.
 
 CREATE TABLE IF NOT EXISTS public.organizations (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id         UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
   name       TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

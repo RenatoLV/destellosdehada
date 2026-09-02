@@ -21,9 +21,9 @@ CREATE TEMP TABLE _tenancy_owner_candidates (
 
 DO $$
 DECLARE
-  table_name TEXT;
+  v_table_name TEXT;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY[
+  FOREACH v_table_name IN ARRAY ARRAY[
     'categories', 'products', 'product_images', 'clients',
     'sales', 'inventory_movements'
   ] LOOP
@@ -31,7 +31,7 @@ BEGIN
       SELECT 1
       FROM information_schema.columns
       WHERE table_schema = 'public'
-        AND information_schema.columns.table_name = table_name
+        AND information_schema.columns.table_name = v_table_name
         AND column_name = 'owner_id'
     ) THEN
       EXECUTE format(
@@ -40,7 +40,7 @@ BEGIN
          FROM public.%I
          WHERE owner_id IS NOT NULL
          ON CONFLICT (user_id) DO NOTHING',
-        table_name
+        v_table_name
       );
     END IF;
   END LOOP;
@@ -92,9 +92,9 @@ END $$;
 -- una membership activa. Esto evita elegir arbitrariamente entre tiendas.
 DO $$
 DECLARE
-  table_name TEXT;
+  v_table_name TEXT;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY[
+  FOREACH v_table_name IN ARRAY ARRAY[
     'categories', 'products', 'product_images', 'clients',
     'sales', 'inventory_movements'
   ] LOOP
@@ -111,7 +111,7 @@ BEGIN
            WHERE membership_other.user_id = entity.owner_id
              AND membership_other.active = TRUE
          ) = 1',
-      table_name
+      v_table_name
     );
   END LOOP;
 END $$;
@@ -140,9 +140,9 @@ WHERE category.id = 'cat_general'
 
 DO $$
 DECLARE
-  table_name TEXT;
+  v_table_name TEXT;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY[
+  FOREACH v_table_name IN ARRAY ARRAY[
     'categories', 'products', 'product_images', 'clients',
     'sales', 'inventory_movements'
   ] LOOP
@@ -161,7 +161,7 @@ BEGIN
          organization_id = EXCLUDED.organization_id,
          reason = EXCLUDED.reason,
          updated_at = NOW() ',
-      table_name, table_name
+      v_table_name, v_table_name
     );
   END LOOP;
 END $$;
