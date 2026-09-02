@@ -1,0 +1,207 @@
+/**
+ * data/mockProducts.ts
+ * Catálogo de joyas de Destellos de Hada para clientes (tienda y ventas de joyería fina).
+ * Todas las imágenes son fotografías profesionales de joyería de alta resolución.
+ */
+
+export type ProductAvailability = 'disponible' | 'ultimas_unidades' | 'agotado';
+
+export type Product = {
+  id: string;
+  sku: string;
+  name: string;
+  material: string;
+  category: string;
+  price: number;
+  imageUrl: string;
+  description?: string;
+  availability: ProductAvailability;
+  featured?: boolean;
+  compareAtPrice?: number;
+};
+
+export const MOCK_PRODUCTS: Product[] = [
+  {
+    id: '1',
+    sku: 'AN-LUN-001',
+    name: 'Anillo Luna',
+    material: 'Plata 925',
+    category: 'Anillos',
+    price: 39990,
+    imageUrl: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=800&auto=format&fit=crop&q=85',
+    description: 'Inspirado en la luz de la luna, elaborado en fina plata 925 con gema brillante central.',
+    availability: 'disponible',
+    featured: true,
+    compareAtPrice: 45990,
+  },
+  {
+    id: '2',
+    sku: 'COL-AUR-002',
+    name: 'Collar Aurora',
+    material: 'Plata 925',
+    category: 'Collares',
+    price: 44990,
+    imageUrl: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&auto=format&fit=crop&q=85',
+    description: 'Colgante delicado con cristal fino en cadena ajustable de 45cm.',
+    availability: 'disponible',
+    featured: true,
+  },
+  {
+    id: '3',
+    sku: 'PUL-ETE-003',
+    name: 'Pulsera Éter',
+    material: 'Plata 925',
+    category: 'Pulseras',
+    price: 49990,
+    imageUrl: 'https://images.unsplash.com/photo-1599643477877-530eb83abc8e?w=800&auto=format&fit=crop&q=85',
+    description: 'Eslabones diamantados refinados con acabado de alto brillo.',
+    availability: 'ultimas_unidades',
+  },
+  {
+    id: '4',
+    sku: 'ARO-EST-004',
+    name: 'Aros Estrella',
+    material: 'Plata 925',
+    category: 'Aros',
+    price: 29990,
+    imageUrl: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?w=800&auto=format&fit=crop&q=85',
+    description: 'Aros colgantes ligeros con micro-circonias incrustadas.',
+    availability: 'disponible',
+  },
+  {
+    id: '5',
+    sku: 'AN-FLO-005',
+    name: 'Anillo Flor de Hada',
+    material: 'Plata 925',
+    category: 'Anillos',
+    price: 36990,
+    imageUrl: 'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=800&auto=format&fit=crop&q=85',
+    description: 'Detalles florales esculpidos a mano con brillante central.',
+    availability: 'disponible',
+    featured: true,
+  },
+  {
+    id: '6',
+    sku: 'COL-BOS-006',
+    name: 'Collar Bosque Encantado',
+    material: 'Plata 925',
+    category: 'Collares',
+    price: 46990,
+    imageUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=800&auto=format&fit=crop&q=85',
+    description: 'Inspiración botánica con piedra facetada de reflejos verdes y dorados.',
+    availability: 'disponible',
+  },
+  {
+    id: '7',
+    sku: 'PUL-LUZ-007',
+    name: 'Pulsera Luz de Luna',
+    material: 'Plata 925 & Perlas',
+    category: 'Pulseras',
+    price: 42990,
+    imageUrl: 'https://images.unsplash.com/photo-1573408301185-9146fe634ad0?w=800&auto=format&fit=crop&q=85',
+    description: 'Combinación de plata ley y perlas cultivadas con brillo aperlado suave.',
+    availability: 'disponible',
+    featured: true,
+  },
+  {
+    id: '8',
+    sku: 'ARO-BRI-008',
+    name: 'Aros Brisa',
+    material: 'Plata 925',
+    category: 'Aros',
+    price: 27990,
+    imageUrl: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=800&auto=format&fit=crop&q=85',
+    description: 'Diseño geométrico estilizado que enmarca el rostro con elegancia sutil.',
+    availability: 'disponible',
+  },
+  {
+    id: '9',
+    sku: 'COL-COM-009',
+    name: 'Collar Cometa Imperial',
+    material: 'Oro 18k',
+    category: 'Collares',
+    price: 89990,
+    imageUrl: 'https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?w=800&auto=format&fit=crop&q=85',
+    description: 'Pieza de joyería fina con baño de oro amarillo 18k y estela de circonias.',
+    availability: 'ultimas_unidades',
+  },
+  {
+    id: '10',
+    sku: 'AN-CON-010',
+    name: 'Anillo Constelación',
+    material: 'Plata bañada en oro',
+    category: 'Anillos',
+    price: 45990,
+    imageUrl: 'https://images.unsplash.com/photo-1598560917505-59a3ad559071?w=800&auto=format&fit=crop&q=85',
+    description: 'Alineación de circonias engarzadas inspiradas en las estrellas.',
+    availability: 'agotado',
+  },
+  {
+    id: '11',
+    sku: 'PER-AZA-011',
+    name: 'Bruma de Azahar',
+    material: 'Eau de parfum · 50 ml',
+    category: 'Perfumes',
+    price: 32990,
+    imageUrl: 'https://images.unsplash.com/photo-1705899844877-81bb0a0665c1?w=800&auto=format&fit=crop&q=85',
+    description: 'Una fragancia luminosa de flores blancas, cítricos suaves y un fondo cálido de almizcle.',
+    availability: 'disponible',
+    featured: true,
+  },
+  {
+    id: '12',
+    sku: 'PER-JAR-012',
+    name: 'Jardín de Luz',
+    material: 'Eau de parfum · 50 ml',
+    category: 'Perfumes',
+    price: 34990,
+    imageUrl: 'https://images.unsplash.com/photo-1615108395437-df128ad79e80?w=800&auto=format&fit=crop&q=85',
+    description: 'Notas florales delicadas con salida fresca y una estela elegante para acompañar todos los días.',
+    availability: 'disponible',
+  },
+  {
+    id: '13',
+    sku: 'PER-ROS-013',
+    name: 'Rosa Nocturna',
+    material: 'Eau de parfum · 30 ml',
+    category: 'Perfumes',
+    price: 29990,
+    imageUrl: 'https://images.unsplash.com/photo-1707539159801-87009aded4cb?w=800&auto=format&fit=crop&q=85',
+    description: 'Rosa aterciopelada, frutos rojos y maderas suaves en una composición envolvente.',
+    availability: 'ultimas_unidades',
+  },
+  {
+    id: '14',
+    sku: 'ROP-BLU-014',
+    name: 'Blusa Aura Marfil',
+    material: 'Viscosa suave',
+    category: 'Ropa',
+    price: 34990,
+    imageUrl: 'https://images.unsplash.com/photo-1558726614-e69abb3d69b6?w=800&auto=format&fit=crop&q=85',
+    description: 'Blusa liviana de caída fluida y tono marfil, pensada para combinar con todo.',
+    availability: 'disponible',
+    featured: true,
+  },
+  {
+    id: '15',
+    sku: 'ROP-CAR-015',
+    name: 'Cardigan Arena',
+    material: 'Tejido suave',
+    category: 'Ropa',
+    price: 42990,
+    imageUrl: 'https://images.unsplash.com/photo-1475048975523-705992b13a68?w=800&auto=format&fit=crop&q=85',
+    description: 'Cardigan versátil en tono arena, de textura confortable y calce relajado.',
+    availability: 'disponible',
+  },
+  {
+    id: '16',
+    sku: 'ROP-VES-016',
+    name: 'Vestido Lino Costa',
+    material: 'Lino liviano',
+    category: 'Ropa',
+    price: 54990,
+    imageUrl: 'https://images.unsplash.com/photo-1659297949927-06fa02629af0?w=800&auto=format&fit=crop&q=85',
+    description: 'Vestido de silueta natural y fresca, inspirado en la luz y los tonos de la costa.',
+    availability: 'ultimas_unidades',
+  },
+];

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" role="img" aria-labelledby="title desc">
+  <title id="title">Destellos de Hada</title><desc id="desc">Joyería de Coquimbo</desc>
+  <g transform="translate(8 11)">
+    <rect width="128" height="128" rx="30" fill="#2A0C16"/>
+    <path d="M28 34h22c25 0 40 12 40 30S75 94 50 94H28V34Zm15 13v34h8c15 0 24-6 24-17s-9-17-24-17h-8Z" fill="#FFFCF7"/>
+    <path d="M64 34h14v22h21V34h14v60H99V69H78v25H64V34Z" fill="#D7B56D"/>
+    <path d="m102 16 2.8 7.2L112 26l-7.2 2.8L102 36l-2.8-7.2L92 26l7.2-2.8L102 16Z" fill="#D7B56D"/>
+  </g>
+  <text x="162" y="70" fill="#2A0C16" font-family="Georgia, 'Times New Roman', serif" font-size="42" letter-spacing="-.6">Destellos de Hada</text>
+  <line x1="164" y1="91" x2="214" y2="91" stroke="#D7B56D" stroke-width="2"/>
+  <text x="228" y="97" fill="#6F2138" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="3.2">JOYERÍA · COQUIMBO</text>
+</svg>
