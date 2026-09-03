@@ -19,6 +19,7 @@ import {
   uploadReceiptToStorage,
 } from '../services/receiptStorage';
 import { setReceiptUploading } from '../database/receipts';
+import { uploadProductImageToDrive } from '../services/productImageStorage';
 import {
   classifySyncFailure,
   getSyncErrorDetails as getErrorDetails,
@@ -32,8 +33,16 @@ const RETRY_MAX_MS = 5 * 60 * 1000;
 const PROCESSING_TIMEOUT_MS = 10 * 60 * 1000;
 const SYNC_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 const SYNC_INTERVAL_MS = 2 * 60 * 1000;
-const SYNCABLE_ENTITIES = new Set(['clients', 'sale_transactions', 'receipt_upload', 'receipt_attach']);
-const PULL_ENTITIES = ['categories', 'products', 'clients', 'receipts'] as const;
+const SYNCABLE_ENTITIES = new Set([
+  'categories',
+  'products',
+  'product_images',
+  'clients',
+  'sale_transactions',
+  'receipt_upload',
+  'receipt_attach',
+]);
+const PULL_ENTITIES = ['categories', 'products', 'product_images', 'clients', 'receipts'] as const;
 const SYNC_OWNER = `sync-${Crypto.randomUUID()}`;
 
 export interface SyncState {
@@ -785,11 +794,70 @@ async function pushQueueItem(
     await pushReceiptAttach(item, organizationId);
     return undefined;
   }
-  const table = supabase.from('clients');
+
+  if (item.entity === 'products' && item.operation === 'INSERT') {
+    const { data, error } = await supabase.rpc('create_product_admin', {
+      p_organization_id: organizationId,
+      p_product: payload,
+    });
+    if (error) throw error;
+    const result = data as { success?: boolean; product_id?: string; code?: string } | null;
+    if (!result?.success || result.product_id !== item.entity_id) {
+      throw new SyncError(result?.code || 'No fue posible registrar el producto.', {
+        code: result?.code || 'PRODUCT_CREATE_FAILED',
+        status: 409,
+      });
+    }
+    return undefined;
+  }
+
+  if (item.entity === 'product_images') {
+    const localUri = typeof payload.local_uri === 'string' ? payload.local_uri : '';
+    const productId = typeof payload.product_id === 'string' ? payload.product_id : '';
+    const mimeType = typeof payload.mime_type === 'string' ? payload.mime_type : 'image/jpeg';
+    const fileName = typeof payload.file_name === 'string' ? payload.file_name : `producto-${productId}.jpg`;
+    if (!localUri || !productId) {
+      throw new SyncError('La imagen local no contiene producto o archivo.', {
+        code: 'INVALID_IMAGE_PAYLOAD',
+        status: 422,
+      });
+    }
+    const result = await uploadProductImageToDrive({
+      imageId: item.entity_id,
+      organizationId,
+      productId,
+      localUri,
+      mimeType,
+      fileName,
+      createdAt: typeof payload.created_at === 'string' ? payload.created_at : undefined,
+    });
+    const db = await getDatabase();
+    await db.runAsync(
+      `UPDATE product_images SET storage_path = ?
+       WHERE id = ? AND organization_id = ?`,
+      [result.file_id ?? null, item.entity_id, organizationId],
+    );
+    return undefined;
+  }
+
+  const tableName = item.entity === 'categories' ? 'categories'
+    : item.entity === 'products' ? 'products'
+      : 'clients';
+  const remotePayload = { ...payload };
+  delete remotePayload.initial_movement_id;
+  delete remotePayload.localImageUri;
+  delete remotePayload.localImageMimeType;
+  delete remotePayload.localImageFileName;
+  if ('categoryId' in remotePayload) {
+    remotePayload.category_id = remotePayload.categoryId;
+    delete remotePayload.categoryId;
+  }
+  const table = supabase.from(tableName);
   let response: { error: { message: string; code?: string; status?: number } | null };
-  if (item.operation === 'INSERT') response = await table.upsert(payload);
-  else if (item.operation === 'UPDATE') response = await table.update(payload).eq('id', item.entity_id).eq('organization_id', organizationId);
-  else if (item.operation === 'DELETE') response = await table.delete().eq('id', item.entity_id).eq('organization_id', organizationId);
+  if (item.operation === 'INSERT') response = await table.upsert(remotePayload);
+  else if (item.operation === 'UPDATE' || item.operation === 'DELETE') {
+    response = await table.update(remotePayload).eq('id', item.entity_id).eq('organization_id', organizationId);
+  }
   else throw new SyncError(`Operación no soportada: ${item.operation}`, { code: 'UNSUPPORTED_OPERATION', status: 422 });
   if (response.error) throw response.error;
 }
@@ -856,7 +924,13 @@ async function processQueueWithLock(organizationId: string, userId: string): Pro
     `SELECT * FROM sync_queue
      WHERE organization_id = ? AND user_id = ? AND status IN ('pending', 'failed')
        AND attempts < ? AND (retry_at IS NULL OR retry_at <= ?)
-     ORDER BY CASE entity WHEN 'clients' THEN 0 WHEN 'sale_transactions' THEN 1 ELSE 2 END,
+     ORDER BY CASE entity
+       WHEN 'categories' THEN 0
+       WHEN 'products' THEN 1
+       WHEN 'product_images' THEN 2
+       WHEN 'clients' THEN 3
+       WHEN 'sale_transactions' THEN 4
+       ELSE 5 END,
        created_at ASC, id ASC LIMIT 50`,
     [organizationId, userId, MAX_ATTEMPTS, new Date().toISOString()]);
   let processed = 0;
@@ -967,6 +1041,18 @@ async function upsertRemoteRow(organizationId: string, entity: typeof PULL_ENTIT
       [row.id, organizationId, value('name'), value('description'), value('category_id'), value('type'),
         value('price') ?? 0, value('cost') ?? 0, value('stock') ?? 0, value('stock') ?? 0, value('sku'),
         value('supplier'), value('active') ?? 1, value('owner_id'), value('created_at'), row.updated_at, value('deleted_at')]);
+  } else if (entity === 'product_images') {
+    await db.runAsync(
+      `INSERT INTO product_images
+       (id, organization_id, owner_id, product_id, local_uri, storage_path, is_primary, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET organization_id = excluded.organization_id,
+         owner_id = excluded.owner_id, product_id = excluded.product_id,
+         local_uri = excluded.local_uri, storage_path = excluded.storage_path,
+         is_primary = excluded.is_primary, sort_order = excluded.sort_order`,
+      [row.id, organizationId, value('owner_id'), value('product_id'), value('local_uri'),
+        value('storage_path'), value('is_primary') ?? 0, value('sort_order') ?? 0, value('created_at')],
+    );
   } else if (entity === 'receipts') {
     await db.runAsync(
       `INSERT INTO receipts

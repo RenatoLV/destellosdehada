@@ -150,6 +150,15 @@ export default function RootLayout() {
         }}
       />
 
+      {/* Gestión del catálogo para owners/admins */}
+      <Stack.Screen
+        name="producto/nuevo"
+        options={{
+          title: 'Registrar producto',
+          presentation: 'modal',
+        }}
+      />
+
     </Stack>
   );
 }

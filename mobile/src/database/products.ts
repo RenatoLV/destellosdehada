@@ -14,6 +14,8 @@ export interface CreateProductInput {
   sku?: string;
   supplier?: string;
   localImageUri?: string;
+  localImageMimeType?: string;
+  localImageFileName?: string;
 }
 
 export async function createProductLocal(input: CreateProductInput): Promise<string> {
@@ -21,7 +23,9 @@ export async function createProductLocal(input: CreateProductInput): Promise<str
   const userId = await getCurrentUserId();
   const db = await getDatabase();
   const productId = Crypto.randomUUID();
+  const productQueueId = Crypto.randomUUID();
   const now = new Date().toISOString();
+  const initialMovementId = input.stock > 0 ? Crypto.randomUUID() : null;
 
   await db.withTransactionAsync(async () => {
     // 1. CREAR EL PRODUCTO
@@ -41,36 +45,23 @@ export async function createProductLocal(input: CreateProductInput): Promise<str
       id: productId, organization_id: organizationId, owner_id: userId, name: input.name,
       description: input.description, category_id: input.categoryId,
       type: input.type, price: input.price, cost: input.cost || 0, stock: input.stock, sku: input.sku,
-      supplier: input.supplier, active: 1, created_at: now, updated_at: now
+      supplier: input.supplier, active: 1, initial_movement_id: initialMovementId,
+      created_at: now, updated_at: now
     });
     
     await db.runAsync(
       `INSERT INTO sync_queue
        (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
        VALUES (?, ?, ?, 'INSERT', 'products', ?, ?, NULL, ?)`,
-      [Crypto.randomUUID(), organizationId, userId, productId, productPayload, now]
+      [productQueueId, organizationId, userId, productId, productPayload, now]
     );
 
     // 2. CREAR MOVIMIENTO DE STOCK INICIAL (Si > 0)
     if (input.stock > 0) {
-      const movementId = Crypto.randomUUID();
       await db.runAsync(
         `INSERT INTO inventory_movements (id, organization_id, owner_id, product_id, type, quantity, reason, stock_before, stock_after, created_at)
          VALUES (?, ?, ?, ?, 'INITIAL_STOCK', ?, 'Inventario inicial', 0, ?, ?)`,
-        [movementId, organizationId, userId, productId, input.stock, input.stock, now]
-      );
-
-      const movPayload = JSON.stringify({
-        id: movementId, organization_id: organizationId, owner_id: userId,
-        product_id: productId, type: 'INITIAL_STOCK', quantity: input.stock,
-        reason: 'Inventario inicial', stock_before: 0, stock_after: input.stock, created_at: now
-      });
-
-      await db.runAsync(
-        `INSERT INTO sync_queue
-         (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
-         VALUES (?, ?, ?, 'INSERT', 'inventory_movements', ?, ?, NULL, ?)`,
-        [Crypto.randomUUID(), organizationId, userId, movementId, movPayload, now]
+        [initialMovementId, organizationId, userId, productId, input.stock, input.stock, now]
       );
     }
 
@@ -85,14 +76,18 @@ export async function createProductLocal(input: CreateProductInput): Promise<str
 
       const imgPayload = JSON.stringify({
         id: imageId, organization_id: organizationId, owner_id: userId,
-        product_id: productId, local_uri: input.localImageUri, is_primary: 1, sort_order: 0, created_at: now
+        product_id: productId, local_uri: input.localImageUri,
+        mime_type: input.localImageMimeType || 'image/jpeg',
+        file_name: input.localImageFileName || `producto-${productId}.jpg`,
+        is_primary: 1, sort_order: 0, created_at: now
       });
 
       await db.runAsync(
         `INSERT INTO sync_queue
-         (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
-         VALUES (?, ?, ?, 'INSERT', 'product_images', ?, ?, NULL, ?)`,
-        [Crypto.randomUUID(), organizationId, userId, imageId, imgPayload, now]
+         (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, depends_on, created_at)
+         VALUES (?, ?, ?, 'INSERT', 'product_images', ?, ?, NULL, ?, ?)`,
+        [Crypto.randomUUID(), organizationId, userId, imageId, imgPayload,
+          JSON.stringify([productQueueId]), now]
       );
     }
   });

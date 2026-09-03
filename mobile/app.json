@@ -38,6 +38,13 @@
       "expo-font",
       "expo-web-browser",
       "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permite que Destellos de Hada seleccione una foto para el catálogo.",
+          "cameraPermission": "Permite que Destellos de Hada tome una foto del producto."
+        }
+      ],
       "expo-status-bar"
     ],
     "experiments": {

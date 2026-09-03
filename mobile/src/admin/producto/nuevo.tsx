@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, 
-  SafeAreaView, KeyboardAvoidingView, Platform, Alert, Image, Switch, ActivityIndicator 
+  SafeAreaView, KeyboardAvoidingView, Platform, Alert, Image, ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -9,14 +9,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAdminProducts } from '../../hooks/useAdminProducts';
 import { useCategories } from '../../hooks/useCategories';
 import { Picker } from '@react-native-picker/picker'; 
+import { useSync } from '../../sync/useSync';
+import { getActiveOrganizationContext } from '../../services/organizationContext';
 
 export default function NuevoProductoScreen() {
   const router = useRouter();
   const { addProduct, products } = useAdminProducts();
   const { categories } = useCategories();
+  const { syncNow, isOnline } = useSync();
 
   // Estados del formulario
-  const [fotos, setFotos] = useState<string[]>([]);
+  const [foto, setFoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [nombre, setNombre] = useState('');
   
   //CAMBIO 1: Inicializa vacío para evitar guardar 'Joyas' como ID de categoría
@@ -28,15 +31,12 @@ export default function NuevoProductoScreen() {
   const [sku, setSku] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [proveedor, setProveedor] = useState('');
-  const [activo, setActivo] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
-  // CAMBIO 2: Asigna el ID real de la primera categoría cargada o 'cat_general'
+  // La categoría es opcional. Evita asociar una categoría de otra organización.
   useEffect(() => {
     if (categories && categories.length > 0) {
       setCategoria(categories[0].id);
-    } else {
-      setCategoria('cat_general');
     }
   }, [categories]);
 
@@ -45,23 +45,6 @@ export default function NuevoProductoScreen() {
   const decrementarStock = () => setStock(prev => (prev > 0 ? prev - 1 : 0));
 
   // Manejo de Imágenes
-  const menuSeleccionFoto = () => {
-    if (fotos.length >= 3) {
-      Alert.alert("Límite alcanzado", "Puedes agregar un máximo de 3 fotografías por producto.");
-      return;
-    }
-
-    Alert.alert(
-      "Agregar fotografía",
-      "Selecciona el origen de la imagen:",
-      [
-        { text: "Tomar Foto", onPress: abrirCamara },
-        { text: "Elegir de Galería", onPress: abrirGaleria },
-        { text: "Cancelar", style: "cancel" }
-      ]
-    );
-  };
-
   const abrirCamara = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
@@ -75,9 +58,7 @@ export default function NuevoProductoScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets[0].uri) {
-      setFotos(prev => [...prev, result.assets[0].uri]);
-    }
+    if (!result.canceled && result.assets[0].uri) setFoto(result.assets[0]);
   };
 
   const abrirGaleria = async () => {
@@ -88,13 +69,7 @@ export default function NuevoProductoScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets[0].uri) {
-      setFotos(prev => [...prev, result.assets[0].uri]);
-    }
-  };
-
-  const eliminarFoto = (index: number) => {
-    setFotos(prev => prev.filter((_, i) => i !== index));
+    if (!result.canceled && result.assets[0].uri) setFoto(result.assets[0]);
   };
 
   const guardarProducto = async () => {
@@ -127,17 +102,18 @@ export default function NuevoProductoScreen() {
     try {
       setGuardando(true);
 
+      const context = await getActiveOrganizationContext();
+      if (context.role !== 'owner' && context.role !== 'admin') {
+        Alert.alert('Permiso requerido', 'Solo una persona administradora puede registrar productos.');
+        return;
+      }
+
       const precioNumerico = Math.round(parseFloat(precio.replace(/\./g, '').replace(',', '.')) || 0);
       const costoNumerico = Math.round(parseFloat(costo.replace(/\./g, '').replace(',', '.')) || 0);
 
-      // CAMBIO 3: Garantiza que enviamos un ID existente en SQLite para evitar el error de Clave Foránea
-      const categoryIdValido = categoria && categoria.trim() !== '' 
-        ? categoria 
-        : (categories.length > 0 ? categories[0].id : 'cat_general');
-
       await addProduct({
         name: nombre.trim(),
-        categoryId: categoryIdValido,
+        categoryId: categoria || undefined,
         type: tipo.trim() || 'General',
         price: precioNumerico,
         cost: costoNumerico,
@@ -145,12 +121,19 @@ export default function NuevoProductoScreen() {
         sku: sku.trim(),
         description: descripcion.trim(),
         supplier: proveedor.trim(),
-        localImageUri: fotos.length > 0 ? fotos[0] : undefined,
+        localImageUri: foto?.uri,
+        localImageMimeType: foto?.mimeType || 'image/jpeg',
+        localImageFileName: foto?.fileName || `producto-${Date.now()}.jpg`,
       });
+
+      const syncResult = await syncNow();
+      const synchronized = isOnline && syncResult.success;
 
       Alert.alert(
         "¡Producto guardado!", 
-        `Se ha registrado "${nombre}" correctamente en el almacenamiento local.`,
+        synchronized
+          ? `Se registró "${nombre}" y ya está disponible en Supabase.`
+          : `Se guardó "${nombre}" en el equipo. Se sincronizará automáticamente al recuperar conexión.`,
         [
           {
             text: "OK",
@@ -177,31 +160,30 @@ export default function NuevoProductoScreen() {
           {/* FOTOS */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Fotos del producto</Text>
-            <Text style={styles.sectionSubtitle}>Agrega hasta 3 fotos desde la cámara o galería</Text>
+            <Text style={styles.sectionSubtitle}>Agrega una foto principal desde la cámara o galería</Text>
             
             <View style={styles.photoGrid}>
-              <TouchableOpacity 
-                style={styles.photoAddBox} 
-                activeOpacity={0.8} 
-                onPress={menuSeleccionFoto}
-              >
-                <View style={styles.iconCircle}>
-                  <Feather name="camera" size={22} color="#7B5CF6" />
-                </View>
-              </TouchableOpacity>
-
-              {fotos.map((uri, index) => (
-                <View key={index} style={styles.photoCard}>
-                  <Image source={{ uri }} style={styles.photoImage} />
-                  <TouchableOpacity style={styles.deleteBadge} onPress={() => eliminarFoto(index)}>
+              {foto ? (
+                <View style={styles.photoCard}>
+                  <Image source={{ uri: foto.uri }} style={styles.photoImage} />
+                  <TouchableOpacity style={styles.deleteBadge} onPress={() => setFoto(null)}>
                     <Feather name="x" size={14} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
-              ))}
+              ) : <View style={styles.photoPlaceholder}><Feather name="image" size={24} color="#C4B5FD" /></View>}
 
-              {Array.from({ length: Math.max(0, 2 - fotos.length) }).map((_, i) => (
-                <View key={`placeholder-${i}`} style={styles.photoPlaceholder} />
-              ))}
+              <View style={styles.photoActions}>
+                {Platform.OS !== 'web' && (
+                  <TouchableOpacity style={styles.photoActionButton} onPress={abrirCamara}>
+                    <Feather name="camera" size={18} color="#7B5CF6" />
+                    <Text style={styles.photoActionText}>Tomar foto</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.photoActionButton} onPress={abrirGaleria}>
+                  <Feather name="image" size={18} color="#7B5CF6" />
+                  <Text style={styles.photoActionText}>Elegir archivo</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -228,8 +210,7 @@ export default function NuevoProductoScreen() {
                   style={styles.picker}
                 >
                   {categories.length === 0 ? (
-                    // CAMBIO 4: Value 'cat_general' mapeado a la fila que creamos en la migración
-                    <Picker.Item label="General" value="cat_general" />
+                    <Picker.Item label="Sin categoría" value="" />
                   ) : (
                     categories.map((cat) => (
                       <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
@@ -351,20 +332,6 @@ export default function NuevoProductoScreen() {
             </View>
           </View>
 
-          {/* SWITCH ACTIVO */}
-          <View style={styles.switchRow}>
-            <View>
-              <Text style={styles.switchLabel}>Producto activo</Text>
-              <Text style={styles.switchSublabel}>Visible en el catálogo e inventario</Text>
-            </View>
-            <Switch
-              trackColor={{ false: '#E2E8F0', true: '#DDD6FE' }}
-              thumbColor={activo ? '#7B5CF6' : '#94A3B8'}
-              onValueChange={setActivo}
-              value={activo}
-            />
-          </View>
-
           <View style={{ height: 120 }} />
 
         </ScrollView>
@@ -397,12 +364,13 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A', marginBottom: 2 },
   sectionSubtitle: { fontSize: 13, color: '#64748B', marginBottom: 14 },
   photoGrid: { flexDirection: 'row', alignItems: 'center' },
-  photoAddBox: { width: 80, height: 80, backgroundColor: '#F5F3FF', borderRadius: 16, borderWidth: 1.5, borderColor: '#C4B5FD', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  iconCircle: { width: 40, height: 40, backgroundColor: '#FFFFFF', borderRadius: 20, justifyContent: 'center', alignItems: 'center', elevation: 2, boxShadow: '0px 2px 4px rgba(62, 31, 92, 0.15)' },
   photoCard: { width: 80, height: 80, borderRadius: 16, marginRight: 12, position: 'relative' },
   photoImage: { width: '100%', height: '100%', borderRadius: 16 },
   deleteBadge: { position: 'absolute', top: -6, right: -6, backgroundColor: '#EF4444', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
-  photoPlaceholder: { width: 80, height: 80, backgroundColor: '#F8FAFC', borderRadius: 16, marginRight: 12, borderWidth: 1, borderColor: '#F1F5F9' },
+  photoPlaceholder: { width: 80, height: 80, backgroundColor: '#F8FAFC', borderRadius: 16, marginRight: 12, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
+  photoActions: { flex: 1, gap: 8 },
+  photoActionButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#F5F3FF', borderRadius: 12, borderWidth: 1, borderColor: '#DDD6FE', paddingHorizontal: 12 },
+  photoActionText: { color: '#5B3CC4', fontSize: 13, fontWeight: '700' },
   pickerContainer: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, height: 52, justifyContent: 'center', overflow: 'hidden' },
   picker: { width: '100%', height: '100%', color: '#0F172A' },
   formGroup: { marginBottom: 18 },
@@ -418,9 +386,6 @@ const styles = StyleSheet.create({
   stockBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, padding: 6 },
   stockActionBtn: { width: 48, height: 48, backgroundColor: '#F5F3FF', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   stockValue: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, marginBottom: 10 },
-  switchLabel: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
-  switchSublabel: { fontSize: 12, color: '#64748B', marginTop: 2 },
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === 'ios' ? 32 : 20, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
   saveButton: { backgroundColor: '#7B5CF6', borderRadius: 16, paddingVertical: 16, alignItems: 'center', boxShadow: '0px 4px 8px rgba(62, 31, 92, 0.25)', elevation: 4 },
   saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },

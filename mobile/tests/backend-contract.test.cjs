@@ -74,3 +74,25 @@ test('hash server-side resuelve pgcrypto explícitamente y usa volatilidad compa
   assert.match(hashFix, /LANGUAGE plpgsql\s+STABLE/i);
   assert.doesNotMatch(hashFix, /\bIMMUTABLE\b/i);
 });
+
+test('alta de producto exige rol admin y registra stock inicial atómicamente', () => {
+  const productAdmin = migration('020_create_product_admin.sql');
+  assert.match(productAdmin, /is_organization_admin\(p_organization_id\)/);
+  assert.match(productAdmin, /INSERT INTO public\.products/);
+  assert.match(productAdmin, /INSERT INTO public\.inventory_movements/);
+  assert.match(productAdmin, /REVOKE ALL ON FUNCTION public\.create_product_admin/);
+  assert.doesNotMatch(productAdmin, /USING\s*\(\s*true\s*\)/i);
+});
+
+test('upload de imagen usa JWT y secretos server-side, nunca service role', () => {
+  const edge = fs.readFileSync(
+    path.resolve(process.cwd(), '..', 'supabase', 'functions', 'upload-product-image', 'index.ts'),
+    'utf8',
+  );
+  assert.match(edge, /supabase\.auth\.getUser\(\)/);
+  assert.match(edge, /GOOGLE_DRIVE_UPLOAD_URL/);
+  assert.match(edge, /GOOGLE_DRIVE_UPLOAD_PASSWORD/);
+  assert.match(edge, /\.in\('role', \['owner', 'admin'\]\)/);
+  assert.doesNotMatch(edge, /SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(edge, /uploadPassword\s*=\s*['"][^'"]+['"]/);
+});

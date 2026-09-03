@@ -9,6 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useProducts } from '../../hooks/useProducts';
 import { useSync } from '../../sync/useSync';
 import { SyncBadge } from '../../components/SyncBadge';
+import { useCategories } from '../../hooks/useCategories';
 
 export default function InventarioScreen() {
   const router = useRouter();
@@ -16,25 +17,25 @@ export default function InventarioScreen() {
   const insets = useSafeAreaInsets();
   const horizontalPadding = width < 360 ? 12 : 16;
   const { products, loading, refreshProducts } = useProducts();
+  const { categories, refreshCategories } = useCategories();
   const { syncNow, isSyncing } = useSync();
   const [refreshing, setRefreshing] = useState(false);
 
   const [busqueda, setBusqueda] = useState('');
-  const [categoriaActiva, setCategoriaActiva] = useState('Todos');
-
-  const categorias = ['Todos', 'Joyas', 'Accesorios', 'Anillos', 'Collares', 'Otros'];
+  const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
 
   // Recargar el inventario al enfocar la pestaña
   useFocusEffect(
     useCallback(() => {
       refreshProducts();
-    }, [refreshProducts])
+      refreshCategories();
+    }, [refreshProducts, refreshCategories])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
     await syncNow();
-    await refreshProducts();
+    await Promise.all([refreshProducts(), refreshCategories()]);
     setRefreshing(false);
   };
 
@@ -42,7 +43,7 @@ export default function InventarioScreen() {
   const productosFiltrados = products.filter((producto) => {
     const coincideNombre = (producto.name || '').toLowerCase().includes(busqueda.toLowerCase()) ||
       (producto.sku || '').toLowerCase().includes(busqueda.toLowerCase());
-    const coincideCategoria = categoriaActiva === 'Todos' || producto.category_id === categoriaActiva;
+    const coincideCategoria = categoriaActiva === null || producto.category_id === categoriaActiva;
     return coincideNombre && coincideCategoria;
   });
 
@@ -61,7 +62,7 @@ export default function InventarioScreen() {
       {/* Cabecera con SyncBadge */}
       <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <View>
-          <Text style={styles.title}>Catálogo ✨</Text>
+          <Text style={styles.title}>Inventario ✨</Text>
           <Text style={styles.subtitle}>{products.length} productos registrados</Text>
         </View>
         <SyncBadge variant="pill" />
@@ -92,21 +93,21 @@ export default function InventarioScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: horizontalPadding }}
         >
-          {categorias.map((cat) => {
-            const count = cat === 'Todos'
+          {[{ id: null, name: 'Todos' }, ...categories].map((cat) => {
+            const count = cat.id === null
               ? products.length
-              : products.filter(p => p.category_id === cat).length;
-            const isSelected = categoriaActiva === cat;
+              : products.filter(p => p.category_id === cat.id).length;
+            const isSelected = categoriaActiva === cat.id;
 
             return (
               <TouchableOpacity
-                key={cat}
+                key={cat.id ?? 'all'}
                 style={[styles.chip, isSelected && styles.chipActive]}
-                onPress={() => setCategoriaActiva(cat)}
+                onPress={() => setCategoriaActiva(cat.id)}
                 activeOpacity={0.75}
               >
                 <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                  {cat}
+                  {cat.name}
                 </Text>
                 {count > 0 && (
                   <View style={[styles.countBadge, isSelected && styles.countBadgeActive]}>
@@ -146,16 +147,16 @@ export default function InventarioScreen() {
             <Text style={styles.emptySub}>
               {busqueda
                 ? `No encontramos productos con "${busqueda}".`
-                : 'El catálogo se administra desde Admin y aparecerá aquí al sincronizar.'}
+                : 'Registra tu primer producto con precio, stock y fotografía.'}
             </Text>
             {!busqueda && (
               <TouchableOpacity
                 style={styles.addFirstBtn}
-                onPress={() => router.push('/(tabs)/mas')}
+                onPress={() => router.push('/producto/nuevo')}
                 activeOpacity={0.85}
               >
-                <Feather name="refresh-cw" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.addFirstBtnText}>Revisar sincronización</Text>
+                <Feather name="camera" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.addFirstBtnText}>Registrar primer producto</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -169,24 +170,23 @@ export default function InventarioScreen() {
             const precioFormatted = Number(producto.price || 0).toLocaleString('es-CL');
 
             return (
-              <TouchableOpacity
+              <View
                 style={styles.productCard}
-                activeOpacity={0.75}
-                onPress={() => router.push({ pathname: '/venta/nueva', params: { productId: producto.id } })}
               >
                 <View style={styles.imageBox}>
                   {producto.image_uri ? <Image source={{ uri: producto.image_uri }} style={styles.image} /> : <Ionicons name="sparkles" size={22} color="#C4B5FD" />}
                 </View>
                 <View style={styles.infoBox}>
                   <Text style={styles.productName} numberOfLines={1}>{producto.name}</Text>
-                  <Text style={styles.categoryText}>{producto.category_id || 'Joyería'}</Text>
+                  <Text style={styles.categoryText}>
+                    {categories.find(category => category.id === producto.category_id)?.name || 'Sin categoría'}
+                  </Text>
                   <Text style={styles.priceText}>${precioFormatted}</Text>
                 </View>
                 <View style={styles.stockColumn}>
                   <View style={[styles.badge, { backgroundColor: badge.bg, borderColor: badge.border }]}><Text style={[styles.badgeText, { color: badge.color }]}>{badge.text}</Text></View>
-                  <Feather name="chevron-right" size={16} color="#CBD5E1" style={{ marginTop: 4 }} />
                 </View>
-              </TouchableOpacity>
+              </View>
             );
           }}
           ListFooterComponent={<View style={{ height: 90 }} />}
@@ -203,15 +203,15 @@ export default function InventarioScreen() {
         />
       )}
 
-      {/* Acción principal del POS */}
+      {/* Acción principal del inventario */}
       <View style={[styles.footer, { paddingHorizontal: horizontalPadding, paddingBottom: Math.max(12, insets.bottom) }]}>
         <TouchableOpacity
           style={styles.fabBtn}
-          onPress={() => router.push('/venta/nueva')}
+          onPress={() => router.push('/producto/nuevo')}
           activeOpacity={0.85}
         >
           <Feather name="plus" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.fabBtnText}>Nueva venta</Text>
+          <Text style={styles.fabBtnText}>Registrar producto</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
