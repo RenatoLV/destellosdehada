@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Destellos de Hada",
+    "slug": "destellos-de-hada-web",
+    "version": "1.0.0",
+    "orientation": "default",
+    "scheme": "destellosdehada",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#FBF5EB"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
