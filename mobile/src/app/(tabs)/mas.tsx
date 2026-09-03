@@ -115,6 +115,16 @@ export default function MasScreen() {
               {isSyncing ? "Sincronizando..." : "Forzar sincronización ahora"}
             </Text>
           </TouchableOpacity>
+
+          {lastError && (
+            <View style={styles.syncErrorCard}>
+              <Feather name="alert-circle" size={16} color="#B45309" style={{ marginTop: 1 }} />
+              <View style={styles.syncErrorContent}>
+                <Text style={styles.syncErrorTitle}>Una operación necesita revisión</Text>
+                <Text style={styles.syncErrorText}>{lastError}</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* OPERACIÓN */}
@@ -215,6 +225,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#7B5CF6',
   },
+  syncErrorCard: {
+    flexDirection: 'row',
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFF7E6',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  syncErrorContent: { flex: 1, marginLeft: 8 },
+  syncErrorTitle: { color: '#92400E', fontSize: 13, fontWeight: '800', marginBottom: 2 },
+  syncErrorText: { color: '#92400E', fontSize: 12, lineHeight: 17 },
   sectionTitle: { fontSize: 14, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, paddingHorizontal: 4 },
   menuItem: {
     flexDirection: 'row',

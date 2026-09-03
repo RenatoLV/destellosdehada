@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import NetInfo from '@react-native-community/netinfo';
+import { Platform } from 'react-native';
 import { supabase } from '../services/supabase';
 import { getDatabase } from '../database/sqlite';
 import { getActiveOrganizationContext } from '../services/organizationContext';
@@ -81,6 +82,7 @@ type StateListener = (state: SyncState) => void;
 const listeners = new Set<StateListener>();
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 let netInfoUnsubscribe: (() => void) | null = null;
+let webConnectivityUnsubscribe: (() => void) | null = null;
 let syncPromise: Promise<{ success: boolean; processed: number; pulled: number }> | null = null;
 
 class SyncError extends Error {
@@ -361,6 +363,7 @@ async function markFailure(item: SyncQueueItem, error: unknown, organizationId: 
   const now = new Date().toISOString();
   const retryAt = !blocked ? new Date(Date.now() + getRetryDelay(attempts)).toISOString() : null;
   const db = await getDatabase();
+  updateState({ lastError: details.message });
   await db.runAsync(
     `UPDATE sync_queue SET status = ?, attempts = ?, last_error = ?, retry_at = ?, next_attempt_at = ?,
        processing_started_at = NULL, updated_at = ?
@@ -934,6 +937,7 @@ async function processQueueWithLock(organizationId: string, userId: string): Pro
        created_at ASC, id ASC LIMIT 50`,
     [organizationId, userId, MAX_ATTEMPTS, new Date().toISOString()]);
   let processed = 0;
+  let hadFailure = false;
   for (const item of pendingItems) {
     await heartbeatSyncLock();
     if (!(await dependenciesAreSynced(item, organizationId))) {
@@ -950,12 +954,13 @@ async function processQueueWithLock(organizationId: string, userId: string): Pro
       await markSuccess(item, organizationId, result);
       processed++;
     } catch (error: unknown) {
+      hadFailure = true;
       await markFailure(item, error, organizationId, userId);
     }
   }
   const counts = await getQueueCounts(organizationId);
   updateState({ ...counts, pendingCount: counts.pendingCount + counts.failedCount });
-  return { success: true, processed };
+  return { success: !hadFailure, processed };
 }
 
 export async function processSyncQueue(): Promise<{ success: boolean; processed: number }> {
@@ -1142,7 +1147,11 @@ async function runSync(): Promise<{ success: boolean; processed: number; pulled:
   try {
     const push = await processQueueWithLock(context.organizationId, context.userId);
     const pull = await pullWithLock(context.organizationId);
-    updateState({ isSyncing: false, lastSyncTime: new Date().toISOString(), lastError: null });
+    updateState({
+      isSyncing: false,
+      lastSyncTime: new Date().toISOString(),
+      lastError: push.success && pull.success ? null : currentState.lastError,
+    });
     return { success: push.success && pull.success, processed: push.processed, pulled: pull.pulled };
   } catch (error: unknown) {
     const message = getErrorDetails(error).message;
@@ -1163,11 +1172,31 @@ export function syncAll(): Promise<{ success: boolean; processed: number; pulled
 export function initSyncEngine(): () => void {
   if (syncTimeout) clearTimeout(syncTimeout);
   netInfoUnsubscribe?.();
-  netInfoUnsubscribe = NetInfo.addEventListener(state => {
-    const isOnline = Boolean(state.isConnected && (state.isInternetReachable ?? true));
-    updateState({ isOnline });
-    if (isOnline) void syncAll();
-  });
+  webConnectivityUnsubscribe?.();
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    // NetInfo can report an unavailable reachability probe in Expo Web even
+    // when the browser can reach Supabase. The browser online/offline events
+    // are the reliable signal for the web client.
+    const updateWebConnectivity = () => {
+      const isOnline = typeof navigator === 'undefined' || navigator.onLine;
+      updateState({ isOnline });
+      if (isOnline) void syncAll();
+    };
+    window.addEventListener('online', updateWebConnectivity);
+    window.addEventListener('offline', updateWebConnectivity);
+    webConnectivityUnsubscribe = () => {
+      window.removeEventListener('online', updateWebConnectivity);
+      window.removeEventListener('offline', updateWebConnectivity);
+    };
+    updateWebConnectivity();
+  } else {
+    netInfoUnsubscribe = NetInfo.addEventListener(state => {
+      const isOnline = Boolean(state.isConnected && (state.isInternetReachable ?? true));
+      updateState({ isOnline });
+      if (isOnline) void syncAll();
+    });
+  }
   void syncAll();
   const scheduleNextSync = () => {
     syncTimeout = setTimeout(() => {
@@ -1184,4 +1213,6 @@ export function stopSyncEngine(): void {
   syncTimeout = null;
   netInfoUnsubscribe?.();
   netInfoUnsubscribe = null;
+  webConnectivityUnsubscribe?.();
+  webConnectivityUnsubscribe = null;
 }
