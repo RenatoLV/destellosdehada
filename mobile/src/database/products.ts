@@ -49,11 +49,22 @@ export async function createProductLocal(input: CreateProductInput): Promise<str
       created_at: now, updated_at: now
     });
     
+    const pendingCategoryQueue = input.categoryId
+      ? await db.getFirstAsync<{ id: string }>(
+        `SELECT id FROM sync_queue
+         WHERE organization_id = ? AND entity = 'categories' AND entity_id = ?
+           AND status IN ('pending', 'processing', 'failed')
+         ORDER BY created_at DESC LIMIT 1`,
+        [organizationId, input.categoryId],
+      )
+      : null;
+
     await db.runAsync(
       `INSERT INTO sync_queue
-       (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
-       VALUES (?, ?, ?, 'INSERT', 'products', ?, ?, NULL, ?)`,
-      [productQueueId, organizationId, userId, productId, productPayload, now]
+       (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, depends_on, created_at)
+       VALUES (?, ?, ?, 'INSERT', 'products', ?, ?, NULL, ?, ?)`,
+      [productQueueId, organizationId, userId, productId, productPayload,
+        pendingCategoryQueue ? JSON.stringify([pendingCategoryQueue.id]) : null, now]
     );
 
     // 2. CREAR MOVIMIENTO DE STOCK INICIAL (Si > 0)

@@ -15,7 +15,7 @@ import { getActiveOrganizationContext } from '../../services/organizationContext
 export default function NuevoProductoScreen() {
   const router = useRouter();
   const { addProduct, products } = useAdminProducts();
-  const { categories } = useCategories();
+  const { categories, addCategory, refreshCategories } = useCategories();
   const { syncNow, isOnline } = useSync();
 
   // Estados del formulario
@@ -29,16 +29,85 @@ export default function NuevoProductoScreen() {
   const [costo, setCosto] = useState('');
   const [stock, setStock] = useState(1);
   const [sku, setSku] = useState('');
+  const [skuManual, setSkuManual] = useState(false);
+  const [nuevaCategoriaVisible, setNuevaCategoriaVisible] = useState(false);
+  const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const [guardandoCategoria, setGuardandoCategoria] = useState(false);
   const [descripcion, setDescripcion] = useState('');
   const [proveedor, setProveedor] = useState('');
   const [guardando, setGuardando] = useState(false);
 
   // La categoría es opcional. Evita asociar una categoría de otra organización.
   useEffect(() => {
-    if (categories && categories.length > 0) {
+    if (!categoria && categories.length > 0) {
       setCategoria(categories[0].id);
     }
-  }, [categories]);
+  }, [categoria, categories]);
+
+  const generarSku = (categoryId: string, categoryName?: string): string => {
+    const nombreCategoria = categoryName
+      || categories.find(category => category.id === categoryId)?.name
+      || 'Producto';
+    const prefijo = nombreCategoria
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase()
+      .slice(0, 3)
+      .padEnd(3, 'X');
+    let correlativo = 1;
+    let candidato = `${prefijo}-${String(correlativo).padStart(4, '0')}`;
+    const existentes = new Set(products.map(product => product.sku?.toUpperCase()).filter(Boolean));
+    while (existentes.has(candidato)) {
+      correlativo += 1;
+      candidato = `${prefijo}-${String(correlativo).padStart(4, '0')}`;
+    }
+    return candidato;
+  };
+
+  useEffect(() => {
+    if (!skuManual) setSku(generarSku(categoria));
+  }, [categoria, categories, products, skuManual]);
+
+  const seleccionarCategoria = (categoryId: string) => {
+    setCategoria(categoryId);
+    if (!skuManual) setSku(generarSku(categoryId));
+  };
+
+  const crearCategoria = async () => {
+    const nombre = nuevaCategoria.trim();
+    if (!nombre) {
+      Alert.alert('Nombre requerido', 'Escribe el nombre de la nueva categoría.');
+      return;
+    }
+    const existente = categories.find(category => category.name.toLocaleLowerCase('es-CL') === nombre.toLocaleLowerCase('es-CL'));
+    if (existente) {
+      seleccionarCategoria(existente.id);
+      setNuevaCategoria('');
+      setNuevaCategoriaVisible(false);
+      return;
+    }
+    try {
+      setGuardandoCategoria(true);
+      const context = await getActiveOrganizationContext();
+      if (context.role !== 'owner' && context.role !== 'admin') {
+        Alert.alert('Permiso requerido', 'Solo una persona administradora puede crear categorías.');
+        return;
+      }
+      const categoryId = await addCategory(nombre);
+      setCategoria(categoryId);
+      setSkuManual(false);
+      setSku(generarSku(categoryId, nombre));
+      setNuevaCategoria('');
+      setNuevaCategoriaVisible(false);
+      await refreshCategories();
+    } catch (error) {
+      console.error('Error al crear categoría:', error);
+      Alert.alert('Error de categoría', 'No se pudo guardar la categoría en este equipo.');
+    } finally {
+      setGuardandoCategoria(false);
+    }
+  };
 
   // Control de Stock
   const incrementarStock = () => setStock(prev => prev + 1);
@@ -206,7 +275,7 @@ export default function NuevoProductoScreen() {
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={categoria}
-                  onValueChange={(itemValue) => setCategoria(itemValue)}
+                  onValueChange={(itemValue) => seleccionarCategoria(String(itemValue))}
                   style={styles.picker}
                 >
                   {categories.length === 0 ? (
@@ -218,6 +287,13 @@ export default function NuevoProductoScreen() {
                   )}
                 </Picker>
               </View>
+              <TouchableOpacity
+                style={styles.addCategoryButton}
+                onPress={() => setNuevaCategoriaVisible(visible => !visible)}
+              >
+                <Feather name="plus-circle" size={14} color="#7B5CF6" />
+                <Text style={styles.addCategoryText}>Nueva categoría</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={[styles.formGroup, { flex: 1 }]}>
@@ -231,6 +307,29 @@ export default function NuevoProductoScreen() {
               />
             </View>
           </View>
+
+          {nuevaCategoriaVisible && (
+            <View style={styles.newCategoryCard}>
+              <Text style={styles.newCategoryLabel}>Nombre de la categoría</Text>
+              <View style={styles.newCategoryRow}>
+                <TextInput
+                  style={[styles.input, styles.newCategoryInput]}
+                  placeholder="Ej. Anillos"
+                  placeholderTextColor="#9CA3AF"
+                  value={nuevaCategoria}
+                  onChangeText={setNuevaCategoria}
+                  autoCapitalize="words"
+                />
+                <TouchableOpacity
+                  style={[styles.createCategoryButton, guardandoCategoria && styles.disabledButton]}
+                  onPress={crearCategoria}
+                  disabled={guardandoCategoria}
+                >
+                  {guardandoCategoria ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.createCategoryText}>Crear</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* PRECIO Y COSTO */}
           <View style={styles.row}>
@@ -305,16 +404,27 @@ export default function NuevoProductoScreen() {
           <View style={styles.row}>
             <View style={[styles.formGroup, { flex: 1, marginRight: 10 }]}>
               <View style={styles.labelOptionalRow}>
-                <Text style={styles.label}>Código / SKU </Text>
-                <Text style={styles.optionalText}>(opcional)</Text>
+                <Text style={styles.label}>Código / SKU</Text>
               </View>
               <TextInput 
                 style={styles.input}
-                placeholder="COL-0001"
+                placeholder="Se genera según categoría"
                 placeholderTextColor="#9CA3AF"
                 value={sku}
-                onChangeText={setSku}
+                onChangeText={(value) => {
+                  setSku(value.toUpperCase());
+                  setSkuManual(true);
+                }}
               />
+              <View style={styles.skuHintRow}>
+                <Text style={styles.skuHint}>{skuManual ? 'SKU personalizado' : 'Generado automáticamente por categoría'}</Text>
+                <TouchableOpacity onPress={() => {
+                  setSkuManual(false);
+                  setSku(generarSku(categoria));
+                }}>
+                  <Text style={styles.regenerateSku}>Regenerar</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={[styles.formGroup, { flex: 1 }]}>
@@ -373,6 +483,15 @@ const styles = StyleSheet.create({
   photoActionText: { color: '#5B3CC4', fontSize: 13, fontWeight: '700' },
   pickerContainer: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, height: 52, justifyContent: 'center', overflow: 'hidden' },
   picker: { width: '100%', height: '100%', color: '#0F172A' },
+  addCategoryButton: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 8 },
+  addCategoryText: { color: '#6D4DE0', fontSize: 12, fontWeight: '700' },
+  newCategoryCard: { backgroundColor: '#F8F5FF', borderRadius: 14, borderWidth: 1, borderColor: '#E5DDFE', padding: 12, marginTop: -8, marginBottom: 18 },
+  newCategoryLabel: { color: '#4C356E', fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  newCategoryRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  newCategoryInput: { flex: 1, paddingVertical: 11 },
+  createCategoryButton: { minWidth: 70, minHeight: 46, alignItems: 'center', justifyContent: 'center', backgroundColor: '#7B5CF6', borderRadius: 12, paddingHorizontal: 12 },
+  createCategoryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  disabledButton: { opacity: 0.65 },
   formGroup: { marginBottom: 18 },
   label: { fontSize: 14, fontWeight: '600', color: '#334155', marginBottom: 8 },
   labelOptionalRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 8 },
@@ -383,6 +502,9 @@ const styles = StyleSheet.create({
   inputPrefixWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14 },
   prefix: { fontSize: 15, fontWeight: '600', color: '#64748B', marginRight: 6 },
   inputBare: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#0F172A' },
+  skuHintRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 7 },
+  skuHint: { color: '#786F7D', fontSize: 11, flex: 1, marginRight: 8 },
+  regenerateSku: { color: '#6D4DE0', fontSize: 11, fontWeight: '800' },
   stockBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, padding: 6 },
   stockActionBtn: { width: 48, height: 48, backgroundColor: '#F5F3FF', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   stockValue: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
