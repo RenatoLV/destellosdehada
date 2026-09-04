@@ -32,8 +32,8 @@ export function useSync() {
     return () => unsubscribe();
   }, []);
 
-  const triggerSync = useCallback(async () => {
-    return await syncAll();
+  const triggerSync = useCallback(async (forceCatalogRetry = false) => {
+    return await syncAll(forceCatalogRetry);
   }, []);
 
   return {

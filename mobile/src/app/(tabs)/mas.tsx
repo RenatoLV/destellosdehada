@@ -26,7 +26,7 @@ export default function MasScreen() {
     }
 
     try {
-      const resultado = await syncNow();
+      const resultado = await syncNow(true);
       if (resultado.success) {
         Alert.alert(
           "¡Sincronización Exitosa! ✨",

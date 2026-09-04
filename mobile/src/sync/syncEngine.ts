@@ -117,7 +117,7 @@ export function getSyncState(): SyncState {
 }
 
 function logSyncEvent(event: string, metadata: Record<string, string | number | undefined> = {}) {
-  console.info(`[SYNC] ${event}`, metadata);
+  console.info(`[SYNC] ${event} ${JSON.stringify(metadata)}`);
 }
 
 function getRetryDelay(attempts: number): number {
@@ -194,6 +194,25 @@ async function recoverAbandonedItems(organizationId: string): Promise<void> {
          WHERE organization_id = ? AND entity = 'receipt_upload' AND status = 'failed'
        )`,
     ['Upload recuperado después de un cierre inesperado.', now, organizationId, organizationId],
+  );
+}
+
+/**
+ * A manual sync is an explicit operator decision to retry non-transactional
+ * catalog work. Automatic retries still stop at MAX_ATTEMPTS, but a product
+ * or category that failed while the server was being repaired must not remain
+ * stranded forever in the local queue.
+ */
+async function resetManualCatalogRetries(organizationId: string, userId: string): Promise<void> {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  await db.runAsync(
+    `UPDATE sync_queue
+     SET status = 'pending', attempts = 0, retry_at = NULL, next_attempt_at = NULL,
+         processing_started_at = NULL, last_error = NULL, updated_at = ?
+     WHERE organization_id = ? AND user_id = ? AND status IN ('failed', 'processing', 'blocked')
+       AND entity IN ('categories', 'products', 'product_images', 'clients')`,
+    [now, organizationId, userId],
   );
 }
 
@@ -979,8 +998,8 @@ async function hasPendingLocalChange(organizationId: string, entity: string, ent
     ? ['receipts', 'receipt_upload', 'receipt_attach']
     : [entity];
   const placeholders = queueEntities.map(() => '?').join(', ');
-  const row = await db.getFirstAsync<{ exists: number }>(
-    `SELECT 1 AS exists FROM sync_queue WHERE organization_id = ? AND entity IN (${placeholders}) AND entity_id = ?
+  const row = await db.getFirstAsync<{ row_exists: number }>(
+    `SELECT 1 AS row_exists FROM sync_queue WHERE organization_id = ? AND entity IN (${placeholders}) AND entity_id = ?
        AND status IN ('pending', 'processing', 'failed', 'blocked') LIMIT 1`,
     [organizationId, ...queueEntities, entityId]);
   return Boolean(row);
@@ -1129,7 +1148,7 @@ export async function pullFromSupabase(): Promise<{ success: boolean; pulled: nu
   finally { await releaseSyncLock(); }
 }
 
-async function runSync(): Promise<{ success: boolean; processed: number; pulled: number }> {
+async function runSync(forceCatalogRetry = false): Promise<{ success: boolean; processed: number; pulled: number }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     await getPendingSyncCount();
@@ -1145,6 +1164,9 @@ async function runSync(): Promise<{ success: boolean; processed: number; pulled:
   logSyncEvent('SYNC_START', { organizationId: context.organizationId });
   updateState({ isSyncing: true, lastError: null });
   try {
+    if (forceCatalogRetry) {
+      await resetManualCatalogRetries(context.organizationId, context.userId);
+    }
     const push = await processQueueWithLock(context.organizationId, context.userId);
     const pull = await pullWithLock(context.organizationId);
     updateState({
@@ -1163,9 +1185,9 @@ async function runSync(): Promise<{ success: boolean; processed: number; pulled:
   }
 }
 
-export function syncAll(): Promise<{ success: boolean; processed: number; pulled: number }> {
+export function syncAll(forceCatalogRetry = false): Promise<{ success: boolean; processed: number; pulled: number }> {
   if (syncPromise) return syncPromise;
-  syncPromise = runSync().finally(() => { syncPromise = null; });
+  syncPromise = runSync(forceCatalogRetry).finally(() => { syncPromise = null; });
   return syncPromise;
 }
 
