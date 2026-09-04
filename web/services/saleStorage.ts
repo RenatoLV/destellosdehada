@@ -508,10 +508,10 @@ class SaleStorageService {
 export const saleStorage = new SaleStorageService();
 
 export const BANK_DETAILS = {
-  bankName: process.env.EXPO_PUBLIC_TRANSFER_BANK_NAME?.trim() ?? '',
-  accountHolder: process.env.EXPO_PUBLIC_TRANSFER_ACCOUNT_HOLDER?.trim() ?? '',
-  rut: process.env.EXPO_PUBLIC_TRANSFER_RUT?.trim() ?? '',
-  accountType: process.env.EXPO_PUBLIC_TRANSFER_ACCOUNT_TYPE?.trim() ?? '',
-  accountNumber: process.env.EXPO_PUBLIC_TRANSFER_ACCOUNT_NUMBER?.trim() ?? '',
-  email: process.env.EXPO_PUBLIC_TRANSFER_EMAIL?.trim() ?? '',
+  bankName: process.env.EXPO_PUBLIC_TRANSFER_BANK_NAME?.trim() || 'Mercado Pago',
+  accountHolder: process.env.EXPO_PUBLIC_TRANSFER_ACCOUNT_HOLDER?.trim() || 'Paola Dinamarca Avilés',
+  rut: process.env.EXPO_PUBLIC_TRANSFER_RUT?.trim() || '13.762.023-5',
+  accountType: process.env.EXPO_PUBLIC_TRANSFER_ACCOUNT_TYPE?.trim() || 'Cuenta Vista',
+  accountNumber: process.env.EXPO_PUBLIC_TRANSFER_ACCOUNT_NUMBER?.trim() || '1041423953',
+  email: process.env.EXPO_PUBLIC_TRANSFER_EMAIL?.trim() || 'dinamarcaviles24@gmail.com',
 };

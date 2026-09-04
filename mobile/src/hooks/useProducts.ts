@@ -10,6 +10,10 @@ export function useProducts() {
       setLoading(true);
       setProducts(await listCatalogProducts());
     } catch (error) {
+      if (error instanceof Error && error.message === 'No existe una sesión autenticada.') {
+        setProducts([]);
+        return;
+      }
       console.error('Error al cargar productos desde SQLite:', error);
     } finally {
       setLoading(false);

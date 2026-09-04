@@ -9,19 +9,23 @@ import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
 import { useAdminProducts } from '../../hooks/useAdminProducts';
 import { useCategories } from '../../hooks/useCategories';
-import { updateProductLocal, softDeleteProductLocal } from '../../database/products';
+import { getProductImagesLocal, updateProductLocal, softDeleteProductLocal } from '../../database/products';
 import { adjustStockLocal } from '../../database/inventory';
+import { getActiveOrganizationContext } from '../../services/organizationContext';
+import { useSync } from '../../sync/useSync';
+import { ProductImage } from '../../types/database';
 
 export default function EditarProductoScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { products, loading: loadingProducts, refreshProducts } = useAdminProducts();
   const { categories } = useCategories();
+  const { syncNow, isOnline } = useSync();
 
   const productoOriginal = products.find(p => String(p.id) === String(id));
 
   const [nombre, setNombre] = useState('');
-  const [categoria, setCategoria] = useState('cat_general');
+  const [categoria, setCategoria] = useState('');
   const [tipo, setTipo] = useState('');
   const [precio, setPrecio] = useState('');
   const [costo, setCosto] = useState('');
@@ -31,13 +35,15 @@ export default function EditarProductoScreen() {
   const [descripcion, setDescripcion] = useState('');
   const [proveedor, setProveedor] = useState('');
   const [activo, setActivo] = useState(true);
-  const [fotoUri, setFotoUri] = useState<string | null>(null);
+  const [fotosExistentes, setFotosExistentes] = useState<ProductImage[]>([]);
+  const [fotosNuevas, setFotosNuevas] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [fotoPrincipalKey, setFotoPrincipalKey] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (productoOriginal) {
       setNombre(productoOriginal.name || '');
-      setCategoria(productoOriginal.category_id || (categories[0]?.id ?? 'cat_general'));
+      setCategoria(productoOriginal.category_id || '');
       setTipo(productoOriginal.type || 'General');
       setPrecio(productoOriginal.price ? String(productoOriginal.price) : '');
       setCosto(productoOriginal.cost ? String(productoOriginal.cost) : '');
@@ -46,23 +52,53 @@ export default function EditarProductoScreen() {
       setDescripcion(productoOriginal.description || '');
       setProveedor(productoOriginal.supplier || '');
       setActivo(productoOriginal.active === 1);
-      setFotoUri(productoOriginal.image_uri || null);
     }
   }, [productoOriginal, categories]);
+
+  useEffect(() => {
+    let active = true;
+    const loadImages = async () => {
+      if (!id) return;
+      try {
+        const images = await getProductImagesLocal(String(id));
+        if (!active) return;
+        setFotosExistentes(images.slice(0, 3));
+        const primary = images.find(image => image.is_primary === 1) ?? images[0];
+        setFotoPrincipalKey(primary ? `existing:${primary.id}` : null);
+      } catch (error) {
+        console.error('Error al cargar las fotografías del producto:', error);
+      }
+    };
+    void loadImages();
+    return () => { active = false; };
+  }, [id]);
 
   const incrementarStock = () => setStock(prev => prev + 1);
   const decrementarStock = () => setStock(prev => (prev > 0 ? prev - 1 : 0));
 
-  const seleccionarFoto = () => {
-    Alert.alert(
-      "Cambiar fotografía",
-      "Selecciona el origen de la imagen:",
-      [
-        { text: "Tomar Foto", onPress: abrirCamara },
-        { text: "Elegir de Galería", onPress: abrirGaleria },
-        { text: "Cancelar", style: "cancel" }
-      ]
-    );
+  const agregarFotos = (assets: ImagePicker.ImagePickerAsset[]) => {
+    const totalActual = fotosExistentes.length + fotosNuevas.length;
+    const disponibles = Math.max(0, 3 - totalActual);
+    if (disponibles === 0) {
+      Alert.alert('Máximo alcanzado', 'Puedes registrar hasta 3 fotografías por producto.');
+      return;
+    }
+    const nuevas = assets
+      .filter(asset => !fotosNuevas.some(existing => existing.uri === asset.uri))
+      .slice(0, disponibles);
+    setFotosNuevas(current => [...current, ...nuevas]);
+    if (!fotoPrincipalKey && nuevas[0]) setFotoPrincipalKey(`new:${nuevas[0].uri}`);
+  };
+
+  const quitarFotoNueva = (uri: string) => {
+    const remaining = fotosNuevas.filter(asset => asset.uri !== uri);
+    setFotosNuevas(remaining);
+    if (fotoPrincipalKey === `new:${uri}`) {
+      const existingPrimary = fotosExistentes.find(image => image.is_primary === 1) ?? fotosExistentes[0];
+      setFotoPrincipalKey(existingPrimary
+        ? `existing:${existingPrimary.id}`
+        : remaining[0] ? `new:${remaining[0].uri}` : null);
+    }
   };
 
   const abrirCamara = async () => {
@@ -77,20 +113,18 @@ export default function EditarProductoScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0].uri) {
-      setFotoUri(result.assets[0].uri);
+      agregarFotos([result.assets[0]]);
     }
   };
 
   const abrirGaleria = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: Math.max(1, 3 - fotosExistentes.length - fotosNuevas.length),
       quality: 0.8,
     });
-    if (!result.canceled && result.assets[0].uri) {
-      setFotoUri(result.assets[0].uri);
-    }
+    if (!result.canceled) agregarFotos(result.assets);
   };
 
   const stockCambio = productoOriginal && stock !== productoOriginal.stock;
@@ -110,14 +144,28 @@ export default function EditarProductoScreen() {
       return;
     }
 
+    const nombreNormalizado = nombre.trim().toLocaleLowerCase('es-CL');
+    const skuNormalizado = sku.trim().toLocaleLowerCase('es-CL');
+    const duplicado = products.find(product => product.id !== productoOriginal?.id && (
+      product.name.trim().toLocaleLowerCase('es-CL') === nombreNormalizado
+      || (skuNormalizado.length > 0 && product.sku?.trim().toLocaleLowerCase('es-CL') === skuNormalizado)
+    ));
+    if (duplicado) {
+      Alert.alert('Producto duplicado', `Ya existe "${duplicado.name}" con el mismo nombre o SKU.`);
+      return;
+    }
+
     try {
       setGuardando(true);
+      const context = await getActiveOrganizationContext();
+      if (context.role !== 'owner' && context.role !== 'admin') {
+        Alert.alert('Permiso requerido', 'Solo una persona administradora puede modificar productos.');
+        return;
+      }
       const precioNum = Math.round(parseFloat(precio.replace(/\./g, '').replace(',', '.')) || 0);
       const costoNum = Math.round(parseFloat(costo.replace(/\./g, '').replace(',', '.')) || 0);
 
-      const categoryIdValido = categoria && categoria.trim() !== '' 
-        ? categoria 
-        : (categories.length > 0 ? categories[0].id : 'cat_general');
+      const categoryIdValido = categoria.trim() || undefined;
 
       // 1. Actualizar los datos generales del producto
       await updateProductLocal(String(id), {
@@ -130,7 +178,15 @@ export default function EditarProductoScreen() {
         description: descripcion.trim(),
         supplier: proveedor.trim(),
         active: activo ? 1 : 0,
-        localImageUri: fotoUri || undefined,
+        images: fotosNuevas.map((foto, index) => ({
+          uri: foto.uri,
+          mimeType: foto.mimeType || 'image/jpeg',
+          fileName: foto.fileName || `producto-${String(id)}-${Date.now()}-${index + 1}.jpg`,
+          isPrimary: fotoPrincipalKey === `new:${foto.uri}`,
+        })),
+        primaryImageId: fotoPrincipalKey?.startsWith('existing:')
+          ? fotoPrincipalKey.slice('existing:'.length)
+          : undefined,
       });
 
       // 2. Si el stock cambió, registrar la corrección de inventario atómica
@@ -145,8 +201,12 @@ export default function EditarProductoScreen() {
       }
 
       await refreshProducts();
+      const syncResult = await syncNow(true);
+      const synchronized = isOnline && syncResult.success;
 
-      Alert.alert("¡Cambios guardados!", "La información se actualizó correctamente.", [
+      Alert.alert("¡Cambios guardados!", synchronized
+        ? 'La información y el stock ya se actualizaron en Supabase.'
+        : 'Los cambios quedaron guardados en este equipo y se sincronizarán al recuperar conexión.', [
         { text: "OK", onPress: () => router.back() }
       ]);
     } catch (error) {
@@ -195,17 +255,71 @@ export default function EditarProductoScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Fotografía principal</Text>
-            <TouchableOpacity style={styles.photoBox} onPress={seleccionarFoto} activeOpacity={0.85}>
-              {fotoUri ? (
-                <Image source={{ uri: fotoUri }} style={styles.photoImage} />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Feather name="camera" size={28} color="#7B5CF6" />
-                  <Text style={styles.photoText}>Tocar para cambiar foto</Text>
-                </View>
+            <Text style={styles.sectionTitle}>Fotografías del producto</Text>
+            <Text style={styles.sectionSubtitle}>Hasta 3 imágenes. Toca una para usarla como principal.</Text>
+            <View style={styles.photoList}>
+              {fotosExistentes.map((foto, index) => {
+                const key = `existing:${foto.id}`;
+                const isPrimary = fotoPrincipalKey === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.photoCard, isPrimary && styles.photoCardPrimary]}
+                    onPress={() => setFotoPrincipalKey(key)}
+                    activeOpacity={0.8}
+                  >
+                    {foto.local_uri ? <Image source={{ uri: foto.local_uri }} style={styles.photoImage} resizeMode="cover" /> : <Feather name="image" size={26} color="#C4B5FD" />}
+                    <View style={[styles.primaryBadge, isPrimary && styles.primaryBadgeActive]}>
+                      <Feather name="star" size={11} color={isPrimary ? '#FFFFFF' : '#6D4DE0'} />
+                      <Text style={[styles.primaryBadgeText, isPrimary && styles.primaryBadgeTextActive]}>
+                        {isPrimary ? 'Principal' : `${index + 1}`}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              {fotosNuevas.map((foto, index) => {
+                const key = `new:${foto.uri}`;
+                const isPrimary = fotoPrincipalKey === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.photoCard, isPrimary && styles.photoCardPrimary]}
+                    onPress={() => setFotoPrincipalKey(key)}
+                    activeOpacity={0.8}
+                  >
+                    <Image source={{ uri: foto.uri }} style={styles.photoImage} resizeMode="cover" />
+                    <View style={[styles.primaryBadge, isPrimary && styles.primaryBadgeActive]}>
+                      <Feather name="star" size={11} color={isPrimary ? '#FFFFFF' : '#6D4DE0'} />
+                      <Text style={[styles.primaryBadgeText, isPrimary && styles.primaryBadgeTextActive]}>
+                        {isPrimary ? 'Principal' : `${fotosExistentes.length + index + 1}`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.deleteBadge} onPress={() => quitarFotoNueva(foto.uri)}>
+                      <Feather name="x" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              })}
+              {fotosExistentes.length + fotosNuevas.length < 3 && (
+                <TouchableOpacity style={styles.photoPlaceholder} onPress={abrirGaleria}>
+                  <Feather name="plus" size={24} color="#7B5CF6" />
+                  <Text style={styles.photoCount}>{fotosExistentes.length + fotosNuevas.length}/3</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </View>
+            <View style={styles.photoActions}>
+              {Platform.OS !== 'web' && (
+                <TouchableOpacity style={styles.photoActionButton} onPress={abrirCamara}>
+                  <Feather name="camera" size={18} color="#6D4DE0" />
+                  <Text style={styles.photoActionText}>Tomar foto</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.photoActionButton} onPress={abrirGaleria}>
+                <Feather name="folder" size={18} color="#6D4DE0" />
+                <Text style={styles.photoActionText}>Elegir archivos</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.formGroup}>
@@ -220,16 +334,13 @@ export default function EditarProductoScreen() {
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={categoria}
-                  onValueChange={(itemValue) => setCategoria(itemValue)}
+                  onValueChange={(itemValue) => setCategoria(String(itemValue))}
                   style={styles.picker}
                 >
-                  {categories.length === 0 ? (
-                    <Picker.Item label="General" value="cat_general" />
-                  ) : (
-                    categories.map((cat) => (
-                      <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
-                    ))
-                  )}
+                  <Picker.Item label="Sin categoría" value="" />
+                  {categories.map((cat) => (
+                    <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+                  ))}
                 </Picker>
               </View>
             </View>
@@ -323,6 +434,15 @@ export default function EditarProductoScreen() {
             />
           </View>
 
+          <TouchableOpacity
+            style={styles.historyBtn}
+            onPress={() => router.push({ pathname: '/producto/historial', params: { id: String(id) } })}
+            activeOpacity={0.8}
+          >
+            <Feather name="clock" size={18} color="#6D4DE0" />
+            <Text style={styles.historyBtnText}>Ver historial de movimientos</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.deleteBtn} onPress={confirmarEliminacion} activeOpacity={0.8}>
             <Feather name="trash-2" size={18} color="#EF4444" style={{ marginRight: 8 }} />
             <Text style={styles.deleteBtnText}>Eliminar producto</Text>
@@ -356,11 +476,22 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 12, color: '#64748B', fontSize: 14 },
   scrollContent: { padding: 20 },
   section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A', marginBottom: 10 },
-  photoBox: { width: '100%', height: 160, borderRadius: 16, overflow: 'hidden', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
-  photoImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  photoPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  photoText: { marginTop: 8, fontSize: 13, color: '#7B5CF6', fontWeight: '600' },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A', marginBottom: 3 },
+  sectionSubtitle: { fontSize: 12, color: '#64748B', marginBottom: 12 },
+  photoList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  photoCard: { width: 88, height: 88, borderRadius: 16, overflow: 'visible', backgroundColor: '#F8FAFC', borderWidth: 2, borderColor: 'transparent', justifyContent: 'center', alignItems: 'center' },
+  photoCardPrimary: { borderColor: '#7B5CF6' },
+  photoImage: { width: '100%', height: '100%', borderRadius: 14 },
+  photoPlaceholder: { width: 88, height: 88, borderRadius: 16, backgroundColor: '#F8F5FF', borderWidth: 1, borderStyle: 'dashed', borderColor: '#C4B5FD', justifyContent: 'center', alignItems: 'center' },
+  photoCount: { marginTop: 3, color: '#786F7D', fontSize: 10, fontWeight: '700' },
+  primaryBadge: { position: 'absolute', left: 5, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 3 },
+  primaryBadgeActive: { backgroundColor: '#6D4DE0' },
+  primaryBadgeText: { color: '#6D4DE0', fontSize: 9, fontWeight: '800' },
+  primaryBadgeTextActive: { color: '#FFFFFF' },
+  deleteBadge: { position: 'absolute', top: -6, right: -6, backgroundColor: '#EF4444', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
+  photoActions: { flexDirection: 'row', gap: 8 },
+  photoActionButton: { flex: 1, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#F5F3FF', borderRadius: 12, borderWidth: 1, borderColor: '#DDD6FE', paddingHorizontal: 12 },
+  photoActionText: { color: '#5B3CC4', fontSize: 13, fontWeight: '700' },
   formGroup: { marginBottom: 18 },
   label: { fontSize: 14, fontWeight: '600', color: '#334155', marginBottom: 8 },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: '#0F172A' },
@@ -392,6 +523,8 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, marginBottom: 16 },
   switchLabel: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
   switchSublabel: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  historyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, backgroundColor: '#F5F3FF', borderRadius: 14, borderWidth: 1, borderColor: '#DDD6FE', marginBottom: 12 },
+  historyBtnText: { color: '#6D4DE0', fontWeight: '700', fontSize: 14 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, backgroundColor: '#FEF2F2', borderRadius: 14, borderWidth: 1, borderColor: '#FCA5A5', marginTop: 10 },
   deleteBtnText: { color: '#DC2626', fontWeight: '700', fontSize: 15 },
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === 'ios' ? 32 : 20, borderTopWidth: 1, borderTopColor: '#F1F5F9' },

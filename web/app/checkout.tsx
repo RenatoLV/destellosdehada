@@ -2,7 +2,7 @@
  * app/checkout.tsx
  * Pantalla principal del flujo de Checkout (Cliente -> Transferencia -> Comprobante -> Confirmación).
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -23,6 +23,7 @@ import {
   type ReceiptData,
   type Sale,
 } from '@/services/saleStorage';
+import { submitPublicOrder } from '@/services/publicOrder';
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -54,6 +55,15 @@ export default function CheckoutScreen() {
   const [createdSale, setCreatedSale] = useState<Sale | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
 
+  useEffect(() => {
+    if (!user) return;
+    setCustomer((current) => ({
+      ...current,
+      fullName: current.fullName || user.name,
+      email: current.email || user.email,
+    }));
+  }, [user]);
+
   const { id: saleId, reference } = useMemo(() => saleStorage.generateSaleId(), []);
 
   // Si no hay items y aún estamos en los primeros pasos, redirigir a venta
@@ -79,29 +89,22 @@ export default function CheckoutScreen() {
     setIsConfirming(true);
 
     try {
-      if (!user || !organization) {
+      if (!user) {
         openLoginModal();
-        throw new Error(organizationError || 'Inicia sesión con una cuenta que pertenezca a la organización.');
+        throw new Error('Inicia sesión o regístrate para enviar tu pedido.');
       }
       if (!receipt) throw new Error('Selecciona el comprobante de transferencia.');
 
-      const newSale = await saleStorage.createLocalSale({
-        identity: { id: saleId, reference },
-        organizationId: organization.id,
-        userId: user.id,
-        lines: [...lines],
-        subtotal,
-        discount,
-        discountAmount,
-        total,
-        customer,
-        receipt,
-      });
+      const organizationId = organization?.id || process.env.EXPO_PUBLIC_CATALOG_ORGANIZATION_ID?.trim();
+      if (!organizationId) throw new Error('La tienda todavía no tiene configurada su organización pública.');
+      const newSale = organization
+        ? await saleStorage.createLocalSale({ identity: { id: saleId, reference }, organizationId, userId: user.id, lines: [...lines], subtotal, discount, discountAmount, total, customer, receipt })
+        : await submitPublicOrder({ id: saleId, reference, organizationId, userId: user.id, lines: [...lines], subtotal, discountAmount, total, customer, receipt });
       setCreatedSale(newSale);
       clear();
       setStep(5);
 
-      const result = await saleStorage.syncAllPending();
+      const result = organization ? await saleStorage.syncAllPending() : { errors: 0 };
       const finalSale = saleStorage.getSaleById(newSale.id) ?? newSale;
       setCreatedSale(finalSale);
       if (finalSale.status === 'rejected' || finalSale.status === 'conflict') {
@@ -109,6 +112,8 @@ export default function CheckoutScreen() {
           message: finalSale.conflictMessage || 'La venta requiere revisión antes de confirmarse.',
           type: 'error',
         });
+      } else if (!organization) {
+        toast.show({ message: 'Pedido recibido. Quedó pendiente de revisión por la tienda.', type: 'info' });
       } else if (result.errors > 0) {
         toast.show({ message: 'La venta quedó guardada y continuará sincronizándose.', type: 'info' });
       }

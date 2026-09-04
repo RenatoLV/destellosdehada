@@ -96,3 +96,31 @@ test('upload de imagen usa JWT y secretos server-side, nunca service role', () =
   assert.doesNotMatch(edge, /SERVICE_ROLE_KEY/);
   assert.doesNotMatch(edge, /uploadPassword\s*=\s*['"][^'"]+['"]/);
 });
+
+test('galería de producto conserva una sola imagen principal y hasta tres cargas locales', () => {
+  const primary = migration('023_product_image_primary.sql');
+  const edge = fs.readFileSync(
+    path.resolve(process.cwd(), '..', 'supabase', 'functions', 'upload-product-image', 'index.ts'),
+    'utf8',
+  );
+  const products = fs.readFileSync(
+    path.resolve(process.cwd(), 'src', 'database', 'products.ts'),
+    'utf8',
+  );
+  assert.match(primary, /is_organization_admin\(p_organization_id\)/i);
+  assert.match(primary, /CASE WHEN id = p_image_id THEN 1 ELSE 0 END/i);
+  assert.match(primary, /REVOKE ALL ON FUNCTION public\.set_product_primary_image/i);
+  assert.match(edge, /is_primary: isPrimary/);
+  assert.match(edge, /sort_order: sortOrder/);
+  assert.match(products, /input\.images\.slice\(0, 3\)/);
+});
+
+test('ajuste administrativo de stock es atómico, auditado e idempotente', () => {
+  const stock = migration('022_adjust_stock_admin.sql');
+  assert.match(stock, /is_organization_admin\(p_organization_id\)/i);
+  assert.match(stock, /FOR UPDATE/i);
+  assert.match(stock, /v_product\.stock <> v_stock_before/i);
+  assert.match(stock, /INSERT INTO public\.inventory_movements/i);
+  assert.match(stock, /MOVEMENT_PAYLOAD_MISMATCH/i);
+  assert.match(stock, /REVOKE ALL ON FUNCTION public\.adjust_stock_admin/i);
+});

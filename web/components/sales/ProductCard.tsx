@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
+import React, { useState } from 'react';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTheme } from '@/theme';
@@ -69,41 +68,62 @@ export function ProductCard({ product, onAdd, onQuickView, index = 0 }: Props) {
         {
           backgroundColor: theme.colors.surface,
           borderColor: hovered ? theme.colors.borderStrong : theme.colors.border,
+          opacity: isSoldOut ? 0.72 : 1,
           ...theme.shadows[hovered ? 'cardHover' : 'card'],
         },
       ]}
     >
-      <Pressable
-        onPress={() => onQuickView?.(product)}
-        onHoverIn={() => setHovered(true)}
-        onHoverOut={() => setHovered(false)}
-        style={styles.imageWrap}
-        accessibilityRole="button"
-        accessibilityLabel={`Ver detalle de ${product.name}`}
-      >
-        {!imageFailed && <Image
-          source={{ uri: product.imageUrl }}
-          style={[styles.image, hovered && styles.imageHovered]}
-          contentFit="cover"
-          transition={180}
-          onLoadStart={() => {
-            setImageFailed(false);
-            setImageLoading(true);
-          }}
-          onLoad={() => setImageLoading(false)}
-          onError={() => {
-            setImageLoading(false);
-            setImageFailed(true);
-          }}
-        />}
-        {imageFailed && <ProductPlaceholder category={product.category} sku={product.sku} />}
-        {imageLoading && <Skeleton style={StyleSheet.absoluteFill} borderRadius={0} />}
+      <View style={styles.imageWrap}>
+        <Pressable
+          onPress={() => onQuickView?.(product)}
+          onHoverIn={() => setHovered(true)}
+          onHoverOut={() => setHovered(false)}
+          style={StyleSheet.absoluteFill}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver detalle de ${product.name}`}
+        >
+          {!imageFailed && (Platform.OS === 'web'
+            ? React.createElement('img', {
+                src: product.imageUrl,
+                alt: product.name,
+                referrerPolicy: 'no-referrer',
+                style: {
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block',
+                  transform: hovered ? 'scale(1.025)' : 'scale(1)',
+                },
+                onLoad: () => setImageLoading(false),
+                onError: () => {
+                  setImageLoading(false);
+                  setImageFailed(true);
+                },
+              })
+            : <Image
+                source={{ uri: product.imageUrl }}
+                style={[styles.image, hovered && styles.imageHovered]}
+                resizeMode="cover"
+                onLoadStart={() => {
+                  setImageFailed(false);
+                  setImageLoading(true);
+                }}
+                onLoad={() => setImageLoading(false)}
+                onError={() => {
+                  setImageLoading(false);
+                  setImageFailed(true);
+                }}
+              />)}
+          {imageFailed && <ProductPlaceholder category={product.category} sku={product.sku} />}
+          {imageLoading && <Skeleton style={StyleSheet.absoluteFill} borderRadius={0} />}
+          {isSoldOut && <View pointerEvents="none" style={styles.soldOutOverlay} />}
 
-        {badge && (
-          <View style={[styles.badge, { backgroundColor: badge.color }]}>
-            <Text style={styles.badgeText}>{badge.label}</Text>
-          </View>
-        )}
+          {badge && (
+            <View style={[styles.badge, { backgroundColor: badge.color }]}>
+              <Text style={styles.badgeText}>{badge.label}</Text>
+            </View>
+          )}
+        </Pressable>
 
         <AnimatedPressable
           onPress={handleFavorite}
@@ -122,12 +142,16 @@ export function ProductCard({ product, onAdd, onQuickView, index = 0 }: Props) {
         </AnimatedPressable>
 
         {!isSoldOut && hovered && (
-          <Pressable onPress={handleAdd} style={[styles.hoverAddBtn, { backgroundColor: theme.colors.primaryDark }]}>
+          <Pressable
+            onPress={handleAdd}
+            onHoverIn={() => setHovered(true)}
+            style={[styles.hoverAddBtn, { backgroundColor: theme.colors.primaryDark }]}
+          >
             <Feather name="plus" size={15} color={theme.colors.textInverse} />
             <Text style={styles.hoverAddBtnText}>Agregar a la selección</Text>
           </Pressable>
         )}
-      </Pressable>
+      </View>
 
       <Pressable onPress={() => onQuickView?.(product)} style={styles.infoSection}>
         <Text style={[styles.productName, { color: theme.colors.text }]} numberOfLines={2}>{product.name}</Text>
@@ -171,6 +195,7 @@ const styles = StyleSheet.create({
   imageHovered: { transform: [{ scale: 1.025 }] },
   badge: { position: 'absolute', left: 9, top: 9, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, zIndex: 5 },
   badgeText: { fontSize: 9.5, color: '#FFFDF9', fontWeight: '700', letterSpacing: 0.55, textTransform: 'uppercase' },
+  soldOutOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(92, 87, 88, 0.38)' },
   favoriteBtn: { position: 'absolute', top: 8, right: 8, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,252,247,0.95)', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   hoverAddBtn: { position: 'absolute', bottom: 9, left: 9, right: 9, borderRadius: 7, minHeight: 44, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
   hoverAddBtnText: { color: '#FFFDF9', fontSize: 12, fontWeight: '700' },

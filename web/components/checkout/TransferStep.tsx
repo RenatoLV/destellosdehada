@@ -38,7 +38,7 @@ export function TransferStep({ total, reference, onNext }: Props) {
     { key: 'holder', label: 'Titular', value: BANK_DETAILS.accountHolder },
     { key: 'rut', label: 'RUT', value: BANK_DETAILS.rut },
     { key: 'type', label: 'Tipo de cuenta', value: BANK_DETAILS.accountType },
-    { key: 'acc', label: 'Cuenta corriente', value: BANK_DETAILS.accountNumber },
+    { key: 'acc', label: 'Número de cuenta', value: BANK_DETAILS.accountNumber },
     { key: 'email', label: 'Email', value: BANK_DETAILS.email },
   ];
   const bankDetailsConfigured = rows.every((row) => row.value.length > 0);

@@ -12,6 +12,11 @@ import { Picker } from '@react-native-picker/picker';
 import { useSync } from '../../sync/useSync';
 import { getActiveOrganizationContext } from '../../services/organizationContext';
 
+function formatThousands(value: string | number): string {
+  const digits = String(value).replace(/\D/g, '');
+  return digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+}
+
 export default function NuevoProductoScreen() {
   const router = useRouter();
   const { addProduct, products } = useAdminProducts();
@@ -19,7 +24,8 @@ export default function NuevoProductoScreen() {
   const { syncNow, isOnline } = useSync();
 
   // Estados del formulario
-  const [foto, setFoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [fotos, setFotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [fotoPrincipalUri, setFotoPrincipalUri] = useState<string | null>(null);
   const [nombre, setNombre] = useState('');
   
   //CAMBIO 1: Inicializa vacío para evitar guardar 'Joyas' como ID de categoría
@@ -114,6 +120,29 @@ export default function NuevoProductoScreen() {
   const decrementarStock = () => setStock(prev => (prev > 0 ? prev - 1 : 0));
 
   // Manejo de Imágenes
+  const agregarFotos = (assets: ImagePicker.ImagePickerAsset[]) => {
+    setFotos(current => {
+      const disponibles = Math.max(0, 3 - current.length);
+      if (disponibles === 0) {
+        Alert.alert('Máximo alcanzado', 'Puedes registrar hasta 3 fotografías por producto.');
+        return current;
+      }
+      const nuevas = assets
+        .filter(asset => !current.some(existing => existing.uri === asset.uri))
+        .slice(0, disponibles);
+      if (!fotoPrincipalUri && nuevas[0]) setFotoPrincipalUri(nuevas[0].uri);
+      return [...current, ...nuevas];
+    });
+  };
+
+  const quitarFoto = (uri: string) => {
+    setFotos(current => {
+      const remaining = current.filter(asset => asset.uri !== uri);
+      if (fotoPrincipalUri === uri) setFotoPrincipalUri(remaining[0]?.uri ?? null);
+      return remaining;
+    });
+  };
+
   const abrirCamara = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
@@ -127,18 +156,18 @@ export default function NuevoProductoScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets[0].uri) setFoto(result.assets[0]);
+    if (!result.canceled && result.assets[0].uri) agregarFotos([result.assets[0]]);
   };
 
   const abrirGaleria = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: Math.max(1, 3 - fotos.length),
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets[0].uri) setFoto(result.assets[0]);
+    if (!result.canceled) agregarFotos(result.assets);
   };
 
   const guardarProducto = async () => {
@@ -177,8 +206,8 @@ export default function NuevoProductoScreen() {
         return;
       }
 
-      const precioNumerico = Math.round(parseFloat(precio.replace(/\./g, '').replace(',', '.')) || 0);
-      const costoNumerico = Math.round(parseFloat(costo.replace(/\./g, '').replace(',', '.')) || 0);
+      const precioNumerico = Number(precio.replace(/\./g, '')) || 0;
+      const costoNumerico = Number(costo.replace(/\./g, '')) || 0;
 
       await addProduct({
         name: nombre.trim(),
@@ -190,9 +219,12 @@ export default function NuevoProductoScreen() {
         sku: sku.trim(),
         description: descripcion.trim(),
         supplier: proveedor.trim(),
-        localImageUri: foto?.uri,
-        localImageMimeType: foto?.mimeType || 'image/jpeg',
-        localImageFileName: foto?.fileName || `producto-${Date.now()}.jpg`,
+        images: fotos.map((foto, index) => ({
+          uri: foto.uri,
+          mimeType: foto.mimeType || 'image/jpeg',
+          fileName: foto.fileName || `producto-${Date.now()}-${index + 1}.jpg`,
+          isPrimary: foto.uri === fotoPrincipalUri,
+        })),
       });
 
       const syncResult = await syncNow();
@@ -206,7 +238,7 @@ export default function NuevoProductoScreen() {
         [
           {
             text: "OK",
-            onPress: () => router.back()
+            onPress: () => router.replace('/inventario')
           }
         ]
       );
@@ -229,19 +261,40 @@ export default function NuevoProductoScreen() {
           {/* FOTOS */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Fotos del producto</Text>
-            <Text style={styles.sectionSubtitle}>Agrega una foto principal desde la cámara o galería</Text>
+            <Text style={styles.sectionSubtitle}>Agrega hasta 3 fotos. Toca una para elegirla como principal.</Text>
             
-            <View style={styles.photoGrid}>
-              {foto ? (
-                <View style={styles.photoCard}>
-                  <Image source={{ uri: foto.uri }} style={styles.photoImage} />
-                  <TouchableOpacity style={styles.deleteBadge} onPress={() => setFoto(null)}>
-                    <Feather name="x" size={14} color="#FFFFFF" />
+            <View style={styles.photoList}>
+              {fotos.map((foto, index) => {
+                const isPrimary = foto.uri === fotoPrincipalUri;
+                return (
+                  <TouchableOpacity
+                    key={foto.uri}
+                    style={[styles.photoCard, isPrimary && styles.photoCardPrimary]}
+                    onPress={() => setFotoPrincipalUri(foto.uri)}
+                    activeOpacity={0.8}
+                  >
+                    <Image source={{ uri: foto.uri }} style={styles.photoImage} />
+                    <View style={[styles.primaryBadge, isPrimary && styles.primaryBadgeActive]}>
+                      <Feather name="star" size={11} color={isPrimary ? '#FFFFFF' : '#6D4DE0'} />
+                      <Text style={[styles.primaryBadgeText, isPrimary && styles.primaryBadgeTextActive]}>
+                        {isPrimary ? 'Principal' : `${index + 1}`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.deleteBadge} onPress={() => quitarFoto(foto.uri)}>
+                      <Feather name="x" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
                   </TouchableOpacity>
-                </View>
-              ) : <View style={styles.photoPlaceholder}><Feather name="image" size={24} color="#C4B5FD" /></View>}
+                );
+              })}
+              {fotos.length < 3 && (
+                <TouchableOpacity style={styles.photoPlaceholder} onPress={abrirGaleria}>
+                  <Feather name="plus" size={24} color="#7B5CF6" />
+                  <Text style={styles.photoPlaceholderText}>{fotos.length}/3</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-              <View style={styles.photoActions}>
+            <View style={styles.photoActions}>
                 {Platform.OS !== 'web' && (
                   <TouchableOpacity style={styles.photoActionButton} onPress={abrirCamara}>
                     <Feather name="camera" size={18} color="#7B5CF6" />
@@ -250,9 +303,8 @@ export default function NuevoProductoScreen() {
                 )}
                 <TouchableOpacity style={styles.photoActionButton} onPress={abrirGaleria}>
                   <Feather name="image" size={18} color="#7B5CF6" />
-                  <Text style={styles.photoActionText}>Elegir archivo</Text>
+                  <Text style={styles.photoActionText}>Elegir archivos</Text>
                 </TouchableOpacity>
-              </View>
             </View>
           </View>
 
@@ -339,11 +391,11 @@ export default function NuevoProductoScreen() {
                 <Text style={styles.prefix}>$</Text>
                 <TextInput 
                   style={styles.inputBare}
-                  placeholder="35000"
+                  placeholder="20.000"
                   placeholderTextColor="#9CA3AF"
                   keyboardType="numeric"
                   value={precio}
-                  onChangeText={setPrecio}
+                  onChangeText={(value) => setPrecio(formatThousands(value))}
                 />
               </View>
             </View>
@@ -357,11 +409,11 @@ export default function NuevoProductoScreen() {
                 <Text style={styles.prefix}>$</Text>
                 <TextInput 
                   style={styles.inputBare}
-                  placeholder="20000"
+                  placeholder="20.000"
                   placeholderTextColor="#9CA3AF"
                   keyboardType="numeric"
                   value={costo}
-                  onChangeText={setCosto}
+                  onChangeText={(value) => setCosto(formatThousands(value))}
                 />
               </View>
             </View>
@@ -375,7 +427,7 @@ export default function NuevoProductoScreen() {
                 <Feather name="minus" size={22} color="#7B5CF6" />
               </TouchableOpacity>
               
-              <Text style={styles.stockValue}>{stock}</Text>
+              <Text style={styles.stockValue}>{formatThousands(stock)}</Text>
               
               <TouchableOpacity style={styles.stockActionBtn} onPress={incrementarStock}>
                 <Feather name="plus" size={22} color="#7B5CF6" />
@@ -473,13 +525,19 @@ const styles = StyleSheet.create({
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A', marginBottom: 2 },
   sectionSubtitle: { fontSize: 13, color: '#64748B', marginBottom: 14 },
-  photoGrid: { flexDirection: 'row', alignItems: 'center' },
-  photoCard: { width: 80, height: 80, borderRadius: 16, marginRight: 12, position: 'relative' },
+  photoList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  photoCard: { width: 88, height: 88, borderRadius: 16, position: 'relative', borderWidth: 2, borderColor: 'transparent' },
+  photoCardPrimary: { borderColor: '#7B5CF6' },
   photoImage: { width: '100%', height: '100%', borderRadius: 16 },
   deleteBadge: { position: 'absolute', top: -6, right: -6, backgroundColor: '#EF4444', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
-  photoPlaceholder: { width: 80, height: 80, backgroundColor: '#F8FAFC', borderRadius: 16, marginRight: 12, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
-  photoActions: { flex: 1, gap: 8 },
-  photoActionButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#F5F3FF', borderRadius: 12, borderWidth: 1, borderColor: '#DDD6FE', paddingHorizontal: 12 },
+  primaryBadge: { position: 'absolute', left: 5, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 3 },
+  primaryBadgeActive: { backgroundColor: '#6D4DE0' },
+  primaryBadgeText: { color: '#6D4DE0', fontSize: 9, fontWeight: '800' },
+  primaryBadgeTextActive: { color: '#FFFFFF' },
+  photoPlaceholder: { width: 88, height: 88, backgroundColor: '#F8F5FF', borderRadius: 16, borderWidth: 1, borderStyle: 'dashed', borderColor: '#C4B5FD', justifyContent: 'center', alignItems: 'center' },
+  photoPlaceholderText: { marginTop: 3, color: '#786F7D', fontSize: 10, fontWeight: '700' },
+  photoActions: { flexDirection: 'row', gap: 8 },
+  photoActionButton: { flex: 1, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#F5F3FF', borderRadius: 12, borderWidth: 1, borderColor: '#DDD6FE', paddingHorizontal: 12 },
   photoActionText: { color: '#5B3CC4', fontSize: 13, fontWeight: '700' },
   pickerContainer: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, height: 52, justifyContent: 'center', overflow: 'hidden' },
   picker: { width: '100%', height: '100%', color: '#0F172A' },

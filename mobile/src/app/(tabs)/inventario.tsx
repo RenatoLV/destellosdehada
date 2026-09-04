@@ -170,8 +170,13 @@ export default function InventarioScreen() {
             const precioFormatted = Number(producto.price || 0).toLocaleString('es-CL');
 
             return (
-              <View
+              <TouchableOpacity
                 style={styles.productCard}
+                onPress={() => router.push({ pathname: '/producto/editar', params: { id: producto.id } })}
+                activeOpacity={0.78}
+                accessibilityRole="button"
+                accessibilityLabel={`Editar ${producto.name}`}
+                accessibilityHint="Abre la ficha para modificar sus datos y stock"
               >
                 <View style={styles.imageBox}>
                   {producto.image_uri ? <Image source={{ uri: producto.image_uri }} style={styles.image} /> : <Ionicons name="sparkles" size={22} color="#C4B5FD" />}
@@ -185,8 +190,9 @@ export default function InventarioScreen() {
                 </View>
                 <View style={styles.stockColumn}>
                   <View style={[styles.badge, { backgroundColor: badge.bg, borderColor: badge.border }]}><Text style={[styles.badgeText, { color: badge.color }]}>{badge.text}</Text></View>
+                  <Feather name="chevron-right" size={18} color="#A398AA" style={styles.cardChevron} />
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           }}
           ListFooterComponent={<View style={{ height: 90 }} />}
@@ -320,6 +326,7 @@ const styles = StyleSheet.create({
   categoryText: { fontSize: 12, color: '#786F7D', marginBottom: 4, fontWeight: '500' },
   priceText: { fontSize: 15, fontWeight: '800', color: '#3E1F5C' },
   stockColumn: { alignItems: 'flex-end', justifyContent: 'center' },
+  cardChevron: { marginTop: 8 },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 3,

@@ -4,8 +4,7 @@
  * vía IconButton, y salida animada (Layout Animations) al eliminar en vez de
  * desaparecer instantáneo (sección 12/34).
  */
-import { StyleSheet, Text, View, Pressable } from 'react-native';
-import { Image } from 'expo-image';
+import { Image, StyleSheet, Text, View, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Animated, { FadeOutLeft, Layout } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -59,7 +58,7 @@ export function CartItemRow({ line, onIncrement, onDecrement, onRemove }: Props)
         <View style={[styles.row, { borderBottomColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
           <View style={[styles.thumb, { backgroundColor: theme.colors.lavender, borderRadius: 10 }]}>
             {product.imageUrl ? (
-              <Image source={{ uri: product.imageUrl }} style={styles.thumbImage} contentFit="cover" transition={150} />
+              <Image source={{ uri: product.imageUrl }} style={styles.thumbImage} resizeMode="cover" />
             ) : (
               <Feather name="award" size={18} color={theme.colors.champagne} />
             )}

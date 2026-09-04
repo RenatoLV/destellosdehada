@@ -21,6 +21,7 @@ export async function adjustStockLocal(input: StockAdjustmentInput): Promise<str
   const userId = await getCurrentUserId();
   const db = await getDatabase();
   const movementId = Crypto.randomUUID();
+  const movementQueueId = Crypto.randomUUID();
   const now = new Date().toISOString();
 
   await db.withTransactionAsync(async () => {
@@ -68,7 +69,7 @@ export async function adjustStockLocal(input: StockAdjustmentInput): Promise<str
       `INSERT INTO sync_queue
        (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
        VALUES (?, ?, ?, 'INSERT', 'inventory_movements', ?, ?, NULL, ?)`,
-      [Crypto.randomUUID(), organizationId, userId, movementId, movPayload, now]
+      [movementQueueId, organizationId, userId, movementId, movPayload, now]
     );
 
     // 3. Actualizar el stock actual del producto
@@ -78,19 +79,9 @@ export async function adjustStockLocal(input: StockAdjustmentInput): Promise<str
       [stockAfter, now, input.productId, organizationId]
     );
 
-    const productPayload = JSON.stringify({
-      id: input.productId,
-      organization_id: organizationId,
-      stock: stockAfter,
-      updated_at: now,
-    });
-
-    await db.runAsync(
-      `INSERT INTO sync_queue
-       (id, organization_id, user_id, operation, entity, entity_id, payload, idempotency_key, created_at)
-       VALUES (?, ?, ?, 'UPDATE', 'products', ?, ?, NULL, ?)`,
-      [Crypto.randomUUID(), organizationId, userId, input.productId, productPayload, now]
-    );
+    // El ajuste remoto lo aplica adjust_stock_admin junto con su movimiento.
+    // No se encola un UPDATE de products separado para evitar stock sin auditoría
+    // o un doble cambio durante retries.
   });
 
   return movementId;

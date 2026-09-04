@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -143,7 +142,7 @@ export function ProductQuickView({ product, visible, onClose, onAdd }: Props) {
             contentContainerStyle={[styles.body, !isDesktop && styles.bodyMobile]}
           >
             <View style={[styles.imageWrap, !isDesktop && styles.imageWrapMobile]}>
-              <Image source={{ uri: product.imageUrl }} style={styles.image} contentFit="cover" transition={180} />
+              <Image source={{ uri: product.imageUrl }} style={styles.image} resizeMode="cover" />
             </View>
 
             <View style={[styles.details, !isDesktop && styles.detailsMobile]}>

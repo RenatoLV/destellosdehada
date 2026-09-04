@@ -8,13 +8,15 @@ export type UserProfile = {
   name: string;
   email: string;
   avatarUrl?: string;
-  role: 'owner' | 'admin' | 'seller';
+  role: 'owner' | 'admin' | 'seller' | 'customer';
 };
+
+type StaffRole = Exclude<UserProfile['role'], 'customer'>;
 
 export type ActiveOrganization = {
   id: string;
   name: string;
-  role: UserProfile['role'];
+  role: StaffRole;
 };
 
 type AuthContextType = {
@@ -24,6 +26,10 @@ type AuthContextType = {
   organizationError: string | null;
   isAuthenticated: boolean;
   login: (email: string, password?: string) => Promise<void>;
+  register: (fullName: string, email: string, password: string) => Promise<{ requiresEmailConfirmation: boolean }>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
+  isPasswordRecovery: boolean;
   logout: () => Promise<void>;
   isLoginModalOpen: boolean;
   openLoginModal: () => void;
@@ -35,12 +41,15 @@ type AuthContextType = {
 
 type MembershipRow = {
   organization_id: string;
-  role: UserProfile['role'];
+  role: StaffRole;
 };
-
-type BootstrapResult = { success: boolean; code?: string };
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const FAVORITES_STORAGE_KEY = 'destellos_favorites_v1';
+
+function authRedirectUrl(flow: 'confirmation' | 'recovery') {
+  if (typeof window === 'undefined') return undefined;
+  return `${window.location.origin}/mas?auth=${flow}`;
+}
 
 function readLocalFavorites(): string[] {
   if (typeof window === 'undefined' || !window.localStorage) return [];
@@ -63,7 +72,7 @@ function profileFromUser(user: User, role: UserProfile['role']): UserProfile {
     ? user.user_metadata.name
     : typeof user.user_metadata?.full_name === 'string'
       ? user.user_metadata.full_name
-      : user.email?.split('@')[0] ?? 'Vendedor';
+      : user.email?.split('@')[0] ?? 'Cliente';
   return {
     id: user.id,
     name,
@@ -95,25 +104,6 @@ async function findOrganization(userId: string): Promise<ActiveOrganization | nu
   return { id: organization.id, name: organization.name, role: membership.role };
 }
 
-async function resolveOrganization(userId: string): Promise<ActiveOrganization> {
-  const existing = await findOrganization(userId);
-  if (existing) return existing;
-
-  const { data, error } = await supabase.rpc('bootstrap_first_organization', {
-    p_name: 'Destellos de Hada',
-  });
-  if (error) throw error;
-  const result = data as BootstrapResult | null;
-  if (!result?.success) {
-    throw new Error(result?.code === 'ORGANIZATION_BOOTSTRAP_CLOSED'
-      ? 'Tu cuenta todavía no tiene acceso a una organización.'
-      : 'No fue posible determinar la organización activa.');
-  }
-  const bootstrapped = await findOrganization(userId);
-  if (!bootstrapped) throw new Error('La organización fue creada, pero no pudo validarse mediante RLS.');
-  return bootstrapped;
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [organization, setOrganization] = useState<ActiveOrganization | null>(null);
@@ -121,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [organizationError, setOrganizationError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>(readLocalFavorites);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -136,18 +127,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setInitializing(true);
       try {
-        const nextOrganization = await resolveOrganization(authUser.id);
+        const nextOrganization = await findOrganization(authUser.id);
         if (!active) return;
         setOrganization(nextOrganization);
-        setUser(profileFromUser(authUser, nextOrganization.role));
+        setUser(profileFromUser(authUser, nextOrganization?.role ?? 'customer'));
         setOrganizationError(null);
-        saleStorage.setContext(authUser.id, nextOrganization.id);
-        void saleStorage.syncAllPending();
+        if (nextOrganization) {
+          saleStorage.setContext(authUser.id, nextOrganization.id);
+          void saleStorage.syncAllPending();
+        } else {
+          saleStorage.clearContext();
+        }
       } catch (cause) {
         if (!active) return;
         setOrganization(null);
-        setUser(profileFromUser(authUser, 'seller'));
-        setOrganizationError(cause instanceof Error ? cause.message : 'No existe una organización activa.');
+        setUser(profileFromUser(authUser, 'customer'));
+        setOrganizationError(cause instanceof Error ? cause.message : 'No fue posible comprobar los permisos internos.');
         saleStorage.clearContext();
       } finally {
         if (active) setInitializing(false);
@@ -155,7 +150,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     void supabase.auth.getSession().then(({ data }) => applyUser(data.session?.user ?? null));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+        setIsLoginModalOpen(true);
+      }
       void applyUser(session?.user ?? null);
     });
     return () => {
@@ -182,6 +181,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoginModalOpen(false);
   };
 
+  const register = async (fullName: string, email: string, password: string) => {
+    requireSupabaseConfiguration();
+    const normalizedName = fullName.trim().replace(/\s+/g, ' ');
+    if (normalizedName.length < 2) throw new Error('Ingresa tu nombre completo.');
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: authRedirectUrl('confirmation'),
+        data: {
+          name: normalizedName,
+          full_name: normalizedName,
+        },
+      },
+    });
+    if (error) throw error;
+    const requiresEmailConfirmation = !data.session;
+    if (!requiresEmailConfirmation) setIsLoginModalOpen(false);
+    return { requiresEmailConfirmation };
+  };
+
+  const requestPasswordReset = async (email: string) => {
+    requireSupabaseConfiguration();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: authRedirectUrl('recovery'),
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (password: string) => {
+    requireSupabaseConfiguration();
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    setIsPasswordRecovery(false);
+    setIsLoginModalOpen(false);
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     saleStorage.clearContext();
@@ -193,8 +229,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       organization,
       initializing,
       organizationError,
-      isAuthenticated: Boolean(user && organization),
+      isAuthenticated: Boolean(user),
       login,
+      register,
+      requestPasswordReset,
+      updatePassword,
+      isPasswordRecovery,
       logout,
       isLoginModalOpen,
       openLoginModal: () => setIsLoginModalOpen(true),

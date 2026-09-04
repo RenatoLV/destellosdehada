@@ -15,9 +15,10 @@ export default function VentasScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const horizontalPadding = width < 360 ? 12 : 16;
-  const { sales, loading, refreshSales } = useSales();
+  const { sales, loading, refreshSales, approveWebSale } = useSales();
   const { syncNow, isSyncing } = useSync();
   const [refreshing, setRefreshing] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -30,6 +31,17 @@ export default function VentasScreen() {
     await syncNow();
     await refreshSales();
     setRefreshing(false);
+  };
+
+  const onApproveWebSale = async (saleId: string) => {
+    try {
+      setApprovingId(saleId);
+      await approveWebSale(saleId);
+    } catch (error) {
+      console.error('No fue posible aprobar el pedido web:', error);
+    } finally {
+      setApprovingId(null);
+    }
   };
 
   const formatearFecha = (fechaISO: string) => {
@@ -51,9 +63,9 @@ export default function VentasScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <View>
-          <Text style={styles.title}>Ventas ✨</Text>
+          <Text style={styles.title}>Ventas y pedidos web ✨</Text>
           <Text style={styles.subtitle}>
-            {sales.length} ventas • Total: ${totalVendido.toLocaleString('es-CL')}
+            {sales.length} registros • Total: ${totalVendido.toLocaleString('es-CL')}
           </Text>
         </View>
         <SyncBadge variant="pill" />
@@ -63,7 +75,7 @@ export default function VentasScreen() {
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="#3E1F5C" />
-          <Text style={styles.loadingText}>Cargando ventas locales...</Text>
+          <Text style={styles.loadingText}>Cargando ventas locales y web...</Text>
         </View>
       ) : sales.length === 0 ? (
         <ScrollView
@@ -124,15 +136,34 @@ export default function VentasScreen() {
                   <Text style={styles.fechaText}>{formatearFecha(venta.created_at)}</Text>
                   <Text style={[
                     styles.syncStatusText,
-                    venta.sync_status === 'failed' && styles.syncStatusFailed,
-                    venta.sync_status === 'pending' && styles.syncStatusPending,
+                    (venta.status === 'rejected' || venta.status === 'conflict' || venta.sync_status === 'failed') && styles.syncStatusFailed,
+                    (venta.status === 'pending' || venta.sync_status === 'pending') && styles.syncStatusPending,
                   ]}>
-                    {venta.sync_status === 'synced' ? 'Sincronizada' : venta.sync_status === 'failed' ? 'Requiere reintento' : 'Pendiente de sincronizar'}
+                    {venta.status === 'confirmed' && venta.sync_status === 'synced'
+                      ? 'Confirmada · sincronizada'
+                      : venta.status === 'rejected'
+                        ? 'Rechazada'
+                        : venta.status === 'conflict'
+                          ? `Requiere revisión${venta.conflict_code ? ` · ${venta.conflict_code}` : ''}`
+                          : venta.status === 'pending'
+                            ? 'Pedido pendiente de confirmación'
+                            : venta.sync_status === 'failed'
+                              ? 'Requiere reintento'
+                              : 'Sincronizando'}
                   </Text>
                   {venta.notes ? (
                     <Text style={styles.notesText} numberOfLines={1}>
                       "{venta.notes}"
                     </Text>
+                  ) : null}
+                  {venta.status === 'pending' && venta.owner_id === null ? (
+                    <TouchableOpacity
+                      style={styles.approveBtn}
+                      disabled={approvingId === venta.id}
+                      onPress={() => onApproveWebSale(venta.id)}
+                    >
+                      <Text style={styles.approveBtnText}>{approvingId === venta.id ? 'Aprobando…' : 'Revisar y aprobar pedido'}</Text>
+                    </TouchableOpacity>
                   ) : null}
                 </View>
 
@@ -229,6 +260,8 @@ const styles = StyleSheet.create({
   syncStatusText: { fontSize: 10, color: '#23805B', fontWeight: '700', marginTop: 3 },
   syncStatusFailed: { color: '#A64242' },
   syncStatusPending: { color: '#B27A16' },
+  approveBtn: { alignSelf: 'flex-start', marginTop: 8, backgroundColor: '#3E1F5C', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 9 },
+  approveBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   amountCol: { alignItems: 'flex-end' },
   totalAmount: { fontSize: 16, fontWeight: '900', color: '#2E7655' },
   discountText: { fontSize: 11, color: '#EF4444', marginTop: 2, fontWeight: '700' },

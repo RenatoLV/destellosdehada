@@ -38,6 +38,10 @@ Deno.serve(async (request) => {
     const mimeType = typeof body?.mime_type === 'string' ? body.mime_type : '';
     const fileName = typeof body?.file_name === 'string' ? body.file_name : '';
     const base64 = typeof body?.base64 === 'string' ? body.base64 : '';
+    const isPrimary = Number(body?.is_primary) === 1 ? 1 : 0;
+    const sortOrder = Number.isInteger(Number(body?.sort_order)) && Number(body.sort_order) >= 0
+      ? Number(body.sort_order)
+      : 0;
     if (!organizationId || !productId || !imageId || !fileName || !base64
       || !allowedMimeTypes.has(mimeType) || base64.length > maxBase64Characters) {
       return response({ success: false, code: 'INVALID_IMAGE_PAYLOAD' }, 422);
@@ -101,6 +105,19 @@ Deno.serve(async (request) => {
       return response({ success: false, code: 'IMAGE_UPLOAD_FAILED' }, 502);
     }
 
+    const updatedAt = new Date().toISOString();
+    if (isPrimary === 1) {
+      const { error: previousPrimaryError } = await supabase
+        .from('product_images')
+        .update({ is_primary: 0, updated_at: updatedAt })
+        .eq('organization_id', organizationId)
+        .eq('product_id', productId)
+        .neq('id', imageId);
+      if (previousPrimaryError) {
+        return response({ success: false, code: 'IMAGE_PRIMARY_UPDATE_FAILED' }, 409);
+      }
+    }
+
     const { error: imageError } = await supabase.from('product_images').upsert({
       id: imageId,
       organization_id: organizationId,
@@ -108,10 +125,10 @@ Deno.serve(async (request) => {
       product_id: productId,
       local_uri: driveResult.fileUrl,
       storage_path: driveResult.fileId,
-      is_primary: 1,
-      sort_order: 0,
+      is_primary: isPrimary,
+      sort_order: sortOrder,
       created_at: typeof body.created_at === 'string' ? body.created_at : new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     });
     if (imageError) return response({ success: false, code: 'IMAGE_METADATA_FAILED' }, 409);
 

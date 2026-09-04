@@ -1,6 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, Pressable, ScrollView } from 'react-native';
-import { Image } from 'expo-image';
+import { Image, StyleSheet, Text, View, Pressable, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/theme';
 import { useCart } from '@/context/CartContext';
@@ -27,7 +26,7 @@ export function OrderSummary({ onNext }: Props) {
             <Image
               source={{ uri: line.product.imageUrl }}
               style={styles.image}
-              contentFit="cover"
+              resizeMode="cover"
             />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={[theme.typography.bodyMedium, { color: theme.colors.text, fontWeight: '700' }]} numberOfLines={1}>

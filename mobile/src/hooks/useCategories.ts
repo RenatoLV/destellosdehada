@@ -12,6 +12,10 @@ export function useCategories() {
       const data = await getCategoriesLocal();
       setCategories(data);
     } catch (error) {
+      if (error instanceof Error && error.message === 'No existe una sesión autenticada.') {
+        setCategories([]);
+        return;
+      }
       console.error('Error al cargar categorías desde SQLite:', error);
     } finally {
       setLoading(false);

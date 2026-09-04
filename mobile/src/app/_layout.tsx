@@ -158,6 +158,21 @@ export default function RootLayout() {
           presentation: 'modal',
         }}
       />
+      <Stack.Screen
+        name="producto/editar"
+        options={{
+          title: 'Editar producto',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="producto/historial"
+        options={{ title: 'Movimientos de stock' }}
+      />
+      <Stack.Screen
+        name="producto/[id]"
+        options={{ title: 'Detalle del producto' }}
+      />
 
     </Stack>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CreatePOSSaleInput, submitPOSSale } from '../domain/pos';
-import { listSales } from '../repositories/salesRepository';
+import { approvePublicSale, listSales } from '../repositories/salesRepository';
 import { SaleSummary } from '../types/database';
 
 export function useSales() {
@@ -28,10 +28,16 @@ export function useSales() {
     return id;
   };
 
+  const approveWebSale = async (saleId: string) => {
+    await approvePublicSale(saleId);
+    await refreshSales();
+  };
+
   return {
     sales,
     loading,
     refreshSales,
     addSale,
+    approveWebSale,
   };
 }

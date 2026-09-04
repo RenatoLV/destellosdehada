@@ -37,6 +37,7 @@ const SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const SYNCABLE_ENTITIES = new Set([
   'categories',
   'products',
+  'inventory_movements',
   'product_images',
   'clients',
   'sale_transactions',
@@ -833,7 +834,78 @@ async function pushQueueItem(
     return undefined;
   }
 
+  if (item.entity === 'inventory_movements' && item.operation === 'INSERT') {
+    const { data, error } = await supabase.rpc('adjust_stock_admin', {
+      p_organization_id: organizationId,
+      p_movement: payload,
+    });
+    if (error) throw error;
+    const result = data as { success?: boolean; movement_id?: string; code?: string; current_stock?: number } | null;
+    if (!result?.success || result.movement_id !== item.entity_id) {
+      const detail = result?.code === 'STOCK_CHANGED' && typeof result.current_stock === 'number'
+        ? ` El stock remoto actual es ${result.current_stock}.`
+        : '';
+      throw new SyncError(`${result?.code || 'No fue posible ajustar el stock.'}${detail}`, {
+        code: result?.code || 'STOCK_ADJUSTMENT_FAILED',
+        status: 409,
+        retryable: false,
+      });
+    }
+    return undefined;
+  }
+
   if (item.entity === 'product_images') {
+    if (item.operation === 'UPDATE') {
+      if (Number(payload.is_primary) === 1) {
+        const { data, error } = await supabase.rpc('set_product_primary_image', {
+          p_organization_id: organizationId,
+          p_product_id: payload.product_id,
+          p_image_id: item.entity_id,
+        });
+        if (error) {
+          const functionUnavailable = error.code === 'PGRST202'
+            || error.message?.includes('set_product_primary_image');
+          if (!functionUnavailable) throw error;
+          // Compatibilidad temporal mientras la migración 023 aún no está
+          // aplicada: dos escrituras RLS idempotentes convergen al mismo estado.
+          const reset = await supabase
+            .from('product_images')
+            .update({ is_primary: 0, updated_at: new Date().toISOString() })
+            .eq('organization_id', organizationId)
+            .eq('product_id', payload.product_id);
+          if (reset.error) throw reset.error;
+          const select = await supabase
+            .from('product_images')
+            .update({ is_primary: 1, updated_at: new Date().toISOString() })
+            .eq('organization_id', organizationId)
+            .eq('product_id', payload.product_id)
+            .eq('id', item.entity_id);
+          if (select.error) throw select.error;
+          return undefined;
+        }
+        const result = data as { success?: boolean; image_id?: string; code?: string } | null;
+        if (!result?.success || result.image_id !== item.entity_id) {
+          throw new SyncError(result?.code || 'No fue posible seleccionar la imagen principal.', {
+            code: result?.code || 'PRIMARY_IMAGE_UPDATE_FAILED',
+            status: 409,
+            retryable: false,
+          });
+        }
+        return undefined;
+      }
+      const imageMetadata = {
+        is_primary: Number(payload.is_primary) === 1 ? 1 : 0,
+        sort_order: Number.isFinite(Number(payload.sort_order)) ? Number(payload.sort_order) : 0,
+        updated_at: typeof payload.updated_at === 'string' ? payload.updated_at : new Date().toISOString(),
+      };
+      const { error } = await supabase
+        .from('product_images')
+        .update(imageMetadata)
+        .eq('id', item.entity_id)
+        .eq('organization_id', organizationId);
+      if (error) throw error;
+      return undefined;
+    }
     const localUri = typeof payload.local_uri === 'string' ? payload.local_uri : '';
     const productId = typeof payload.product_id === 'string' ? payload.product_id : '';
     const mimeType = typeof payload.mime_type === 'string' ? payload.mime_type : 'image/jpeg';
@@ -852,12 +924,20 @@ async function pushQueueItem(
       mimeType,
       fileName,
       createdAt: typeof payload.created_at === 'string' ? payload.created_at : undefined,
+      isPrimary: Number(payload.is_primary) === 1,
+      sortOrder: Number.isFinite(Number(payload.sort_order)) ? Number(payload.sort_order) : 0,
     });
     const db = await getDatabase();
+    if (!result.file_url) {
+      throw new SyncError('La imagen se subió, pero no devolvió una URL remota.', {
+        code: 'IMAGE_URL_MISSING',
+        status: 502,
+      });
+    }
     await db.runAsync(
-      `UPDATE product_images SET storage_path = ?
+      `UPDATE product_images SET local_uri = ?, storage_path = ?
        WHERE id = ? AND organization_id = ?`,
-      [result.file_id ?? null, item.entity_id, organizationId],
+      [result.file_url, result.file_id ?? null, item.entity_id, organizationId],
     );
     return undefined;
   }
@@ -870,6 +950,8 @@ async function pushQueueItem(
   delete remotePayload.localImageUri;
   delete remotePayload.localImageMimeType;
   delete remotePayload.localImageFileName;
+  delete remotePayload.images;
+  delete remotePayload.primaryImageId;
   if ('categoryId' in remotePayload) {
     remotePayload.category_id = remotePayload.categoryId;
     delete remotePayload.categoryId;
@@ -948,10 +1030,11 @@ async function processQueueWithLock(organizationId: string, userId: string): Pro
        AND attempts < ? AND (retry_at IS NULL OR retry_at <= ?)
      ORDER BY CASE entity
        WHEN 'categories' THEN 0
-       WHEN 'products' THEN 1
-       WHEN 'product_images' THEN 2
-       WHEN 'clients' THEN 3
-       WHEN 'sale_transactions' THEN 4
+       WHEN 'inventory_movements' THEN 1
+       WHEN 'products' THEN 2
+       WHEN 'product_images' THEN 3
+       WHEN 'clients' THEN 4
+       WHEN 'sale_transactions' THEN 5
        ELSE 5 END,
        created_at ASC, id ASC LIMIT 50`,
     [organizationId, userId, MAX_ATTEMPTS, new Date().toISOString()]);

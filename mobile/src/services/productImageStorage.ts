@@ -13,6 +13,8 @@ export interface ProductImageUploadInput {
   mimeType: string;
   fileName: string;
   createdAt?: string;
+  isPrimary?: boolean;
+  sortOrder?: number;
 }
 
 export interface ProductImageUploadResult {
@@ -67,6 +69,8 @@ export async function uploadProductImageToDrive(
       mime_type: input.mimeType,
       file_name: input.fileName,
       created_at: input.createdAt,
+      is_primary: input.isPrimary ? 1 : 0,
+      sort_order: input.sortOrder ?? 0,
       base64: file.base64,
     },
   });
